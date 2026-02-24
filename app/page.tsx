@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   BookOpenCheck,
   Brain,
@@ -14,7 +14,6 @@ import {
   PanelRightOpen,
   Sparkles,
   Settings as SettingsIcon,
-  Upload,
   User,
 } from "lucide-react";
 
@@ -97,6 +96,8 @@ type PersistedDashboardState = {
 
 const DASHBOARD_STORAGE_KEY = "boringcourse-dashboard-v1";
 const LATEST_STUDY_GUIDE_KEY = "boringcourse-latest-study-guide-v1";
+const HIDE_TUTOR_RESUME_KEY = "boringcourse-hide-resume-tutor-v1";
+const HIDE_STUDY_GUIDE_RESUME_KEY = "boringcourse-hide-resume-study-guide-v1";
 
 const fallbackUpcoming: AssignmentItem[] = [
   { id: 1, name: "Lab Report Draft", dueAt: null, type: "Assignment" },
@@ -180,8 +181,6 @@ function isLikelyUnitHeader(title: string): boolean {
 }
 
 export default function Home() {
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [canvasMessage, setCanvasMessage] = useState("Connect Canvas to load real courses, assignments, and grades.");
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -194,11 +193,8 @@ export default function Home() {
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
   const [courseAssignments, setCourseAssignments] = useState<AssignmentItem[]>([]);
   const [assignmentCache, setAssignmentCache] = useState<AssignmentCache>({});
-  const [assignmentSearch, setAssignmentSearch] = useState("");
-  const [assignmentLoading, setAssignmentLoading] = useState(false);
 
   const [uploadedMaterials, setUploadedMaterials] = useState<UploadedMaterial[]>([]);
-  const [uploadMessage, setUploadMessage] = useState("No assignment uploaded yet.");
 
   const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
   const [flashcardsLoading, setFlashcardsLoading] = useState(false);
@@ -212,6 +208,8 @@ export default function Home() {
   const [aiUnitConcepts, setAiUnitConcepts] = useState<Record<string, string[]>>({});
   const [aiUnitConceptsLoading, setAiUnitConceptsLoading] = useState<Record<string, boolean>>({});
   const [hasStudyGuideHistory, setHasStudyGuideHistory] = useState(false);
+  const [resumeTutorHref, setResumeTutorHref] = useState<string | null>(null);
+  const [resumeStudyGuideHref, setResumeStudyGuideHref] = useState<string | null>(null);
   const [latestStudyTimeline, setLatestStudyTimeline] = useState<Array<{ day: string; tasks: string[]; minutes: number }>>([]);
 
   useEffect(() => {
@@ -257,7 +255,24 @@ export default function Home() {
 
   useEffect(() => {
     const refreshStudyGuideState = () => {
-      const hasGuide = readHistory().some((item) => item.type === "study-guide");
+      const historyItems = readHistory();
+      const hasGuide = historyItems.some((item) => item.type === "study-guide");
+      const latestTutor = historyItems.find((item) => item.type === "tutor") ?? null;
+      const latestStudyGuide = historyItems.find((item) => item.type === "study-guide") ?? null;
+      const tutorResumeHidden = window.localStorage.getItem(HIDE_TUTOR_RESUME_KEY) === "1";
+      const studyGuideResumeHidden = window.localStorage.getItem(HIDE_STUDY_GUIDE_RESUME_KEY) === "1";
+      if (latestTutor && !tutorResumeHidden) {
+        const separator = latestTutor.path.includes("?") ? "&" : "?";
+        setResumeTutorHref(`${latestTutor.path}${separator}historyId=${encodeURIComponent(latestTutor.id)}`);
+      } else {
+        setResumeTutorHref(null);
+      }
+      if (latestStudyGuide && !studyGuideResumeHidden) {
+        const separator = latestStudyGuide.path.includes("?") ? "&" : "?";
+        setResumeStudyGuideHref(`${latestStudyGuide.path}${separator}historyId=${encodeURIComponent(latestStudyGuide.id)}`);
+      } else {
+        setResumeStudyGuideHref(null);
+      }
       let hasTimeline = false;
       try {
         const raw = window.localStorage.getItem(LATEST_STUDY_GUIDE_KEY);
@@ -273,7 +288,11 @@ export default function Home() {
           if (plan.length > 0) {
             hasTimeline = true;
             setLatestStudyTimeline(plan);
+          } else {
+            setLatestStudyTimeline([]);
           }
+        } else {
+          setLatestStudyTimeline([]);
         }
       } catch {
         // Ignore malformed local timeline.
@@ -322,25 +341,6 @@ export default function Home() {
     () => courses.find((course) => course.id === selectedCourseId) ?? null,
     [courses, selectedCourseId],
   );
-
-  const filteredAssignments = useMemo(() => {
-    const query = assignmentSearch.trim().toLowerCase();
-    if (!query) {
-      return courseAssignments.slice(0, 50);
-    }
-
-    return courseAssignments
-      .filter((assignment) => assignment.name.toLowerCase().includes(query))
-      .slice(0, 50);
-  }, [assignmentSearch, courseAssignments]);
-
-  const selectedAssignmentTitle = useMemo(() => {
-    const exact = courseAssignments.find(
-      (assignment) => assignment.name.toLowerCase() === assignmentSearch.trim().toLowerCase(),
-    );
-
-    return exact?.name ?? assignmentSearch.trim();
-  }, [assignmentSearch, courseAssignments]);
 
   const focusSubjects = useMemo<FocusDisplay[]>(
     () =>
@@ -483,13 +483,9 @@ export default function Home() {
 
     if (preferCache && cached && cached.length > 0) {
       setCourseAssignments(cached);
-      setUploadMessage(
-        `Loaded ${cached.length} saved assignment(s) for ${courses.find((course) => course.id === courseId)?.name ?? "course"}.`,
-      );
       return;
     }
 
-    setAssignmentLoading(true);
     setGlobalError("");
 
     try {
@@ -515,18 +511,9 @@ export default function Home() {
 
       setCourseAssignments(mapped);
       setAssignmentCache((prev) => ({ ...prev, [courseId]: mapped }));
-      setAssignmentSearch("");
-      setUploadMessage(
-        mapped.length > 0
-          ? `Loaded ${mapped.length} assignment(s) for ${courses.find((course) => course.id === courseId)?.name ?? "course"}.`
-          : "No assignments found for this course.",
-      );
     } catch (error) {
       setCourseAssignments([]);
-      setUploadMessage("Could not load assignments for this course.");
       setGlobalError(error instanceof Error ? error.message : "Failed to load assignments");
-    } finally {
-      setAssignmentLoading(false);
     }
   }
 
@@ -568,60 +555,13 @@ export default function Home() {
         await loadAssignmentsForCourse(firstCourseId, { preferCache: true });
       }
 
-      setCanvasMessage(`Synced ${fetchedCourses.length} course(s). Select a course and search its assignments before upload.`);
+      setCanvasMessage(`Synced ${fetchedCourses.length} course(s).`);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Canvas sync failed";
       setGlobalError(message);
       setCanvasMessage("Canvas sync failed. Add CANVAS_BASE_URL and CANVAS_API_TOKEN in .env.local.");
     } finally {
       setCanvasLoading(false);
-    }
-  }
-
-  async function handleFileUpload(file: File) {
-    setGlobalError("");
-
-    if (!selectedCourseId) {
-      setUploadMessage("Choose a Canvas course first.");
-      return;
-    }
-
-    if (!selectedAssignmentTitle) {
-      setUploadMessage("Search and select a Canvas assignment title first.");
-      return;
-    }
-
-    setUploadMessage("Parsing file...");
-
-    try {
-      const formData = new FormData();
-      formData.set("file", file);
-      formData.set("assignmentTitle", selectedAssignmentTitle);
-
-      const response = await fetch("/api/upload/parse", {
-        method: "POST",
-        body: formData,
-      });
-
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error ?? "Failed to parse upload");
-      }
-
-      const material: UploadedMaterial = {
-        title: selectedAssignmentTitle,
-        content: String(json.content ?? ""),
-        preview: String(json.preview ?? ""),
-        conceptHint: String(json.conceptHint ?? ""),
-        wordCount: Number(json.wordCount ?? 0),
-      };
-
-      setUploadedMaterials((prev) => [material, ...prev].slice(0, 5));
-      setUploadMessage(`Uploaded ${material.title} (${material.wordCount} words).`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Upload failed";
-      setGlobalError(message);
-      setUploadMessage("Upload failed. Use txt, pdf, or docx.");
     }
   }
 
@@ -792,75 +732,11 @@ export default function Home() {
                 Stop guessing what to study. Let your boring course work for you.
               </h1>
               <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-                Connect Canvas, pick a course, search assignments, upload text/PDF/DOCX, and get a weekly plan with
+                Connect Canvas, upload text/PDF/DOCX, and get a weekly plan with
                 personalized tutoring, flashcards, and quiz practice.
               </p>
               <p className="text-sm text-muted-foreground">{canvasMessage}</p>
               {globalError ? <p className="text-sm font-semibold text-red-600">{globalError}</p> : null}
-            </div>
-            <div className="flex flex-wrap gap-3 md:w-[360px] md:flex-col">
-              <select
-                value={selectedCourseId ?? ""}
-                onChange={(event) => {
-                  const rawValue = event.target.value;
-                  if (!rawValue) {
-                    setSelectedCourseId(null);
-                    setCourseAssignments([]);
-                    setAssignmentSearch("");
-                    return;
-                  }
-
-                  const courseId = Number(rawValue);
-                  setSelectedCourseId(courseId);
-                  void loadAssignmentsForCourse(courseId, { preferCache: true });
-                }}
-                className="h-10 rounded-full border bg-background px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
-              >
-                <option value="">Select Canvas course</option>
-                {courses.map((course) => (
-                  <option key={course.id} value={course.id}>
-                    {course.name}
-                  </option>
-                ))}
-              </select>
-
-              <input
-                value={assignmentSearch}
-                onChange={(event) => setAssignmentSearch(event.target.value)}
-                list="canvas-assignment-list"
-                placeholder={assignmentLoading ? "Loading assignments..." : "Search assignment title in selected course"}
-                className="h-10 rounded-full border bg-background px-4 text-sm outline-none focus:ring-2 focus:ring-ring"
-                disabled={!selectedCourseId || assignmentLoading}
-              />
-              <datalist id="canvas-assignment-list">
-                {filteredAssignments.map((assignment) => (
-                  <option key={assignment.id} value={assignment.name} />
-                ))}
-              </datalist>
-
-              <input
-                ref={fileInputRef}
-                type="file"
-                className="hidden"
-                accept=".txt,.md,.pdf,.docx"
-                onChange={(event) => {
-                  const file = event.target.files?.[0];
-                  if (file) {
-                    void handleFileUpload(file);
-                    event.target.value = "";
-                  }
-                }}
-              />
-
-              <Button className="flex-1 md:flex-none" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="size-4" /> Add Assignment
-              </Button>
-
-              <p className="text-xs text-muted-foreground">
-                {selectedCourse ? `Course: ${selectedCourse.name}` : "Select course"}
-                {selectedAssignmentTitle ? ` | Assignment: ${selectedAssignmentTitle}` : " | Select assignment"}
-              </p>
-              <p className="text-xs text-muted-foreground">{uploadMessage}</p>
             </div>
           </div>
           </header>
@@ -953,6 +829,11 @@ export default function Home() {
                 <Link href="/tutor?mode=focus">Focus</Link>
               </Button>
             </div>
+            {resumeTutorHref ? (
+              <Button asChild variant="secondary" className="mt-2 w-full">
+                <Link href={resumeTutorHref}>Jump Back In</Link>
+              </Button>
+            ) : null}
             </Card>
           </section>
 
@@ -1011,6 +892,11 @@ export default function Home() {
             <Button asChild>
               <Link href="/study-guide">Generate Study Guide</Link>
             </Button>
+            {resumeStudyGuideHref ? (
+              <Button asChild variant="secondary" className="mt-2">
+                <Link href={resumeStudyGuideHref}>Jump Back In</Link>
+              </Button>
+            ) : null}
             <p className="mt-3 text-sm text-muted-foreground">
               Opens the dedicated Study Guide page with course/assignment/unit selectors and checklist tracking.
             </p>

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
-import { ArrowLeft, CheckSquare, FileText, Sparkles, Upload } from "lucide-react";
+import { ArrowLeft, CheckSquare, FileText, SendHorizontal, Sparkles, Upload } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -47,9 +48,26 @@ type PersistedDashboardState = {
 
 type StudyGuideResult = {
   overview: string;
+  clarificationQuestion?: string;
+  topicOutline?: { topic: string; concepts: string[] };
   plan: Array<{ day: string; tasks: string[]; minutes: number }>;
   priorities: Array<{ subject: string; reason: string; action: string }>;
   checklist: string[];
+};
+
+type StudyGuideStructured = {
+  tutor_handoff?: {
+    context?: {
+      course?: { name?: string | null };
+      assessment?: { title?: string | null };
+      topics?: Array<{ topic?: string; badge?: string }>;
+      quiz_style?: { mcq?: string; free_response?: string; graphing?: string };
+    };
+    brief?: string;
+  };
+  scope_lock?: {
+    topics?: Array<{ topic?: string; badge?: string }>;
+  };
 };
 
 type LocalDocMaterial = {
@@ -63,9 +81,17 @@ type LocalImage = {
   dataUrl: string;
 };
 
+type GuideChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+  createdAt: number;
+};
+
 const DASHBOARD_STORAGE_KEY = "boringcourse-dashboard-v1";
 const CHECKLIST_STORAGE_KEY = "boringcourse-study-checks-v1";
 const LATEST_STUDY_GUIDE_KEY = "boringcourse-latest-study-guide-v1";
+const TUTOR_HANDOFF_KEY = "boringcourse-tutor-handoff-v1";
+const HIDE_STUDY_GUIDE_RESUME_KEY = "boringcourse-hide-resume-study-guide-v1";
 
 function extractUnitTag(title: string): string | null {
   const match = title.match(/\b(unit\s*\d+|chapter\s*\d+|module\s*\d+|lesson\s*\d+)\b/i);
@@ -94,6 +120,7 @@ function summarizeSelectedAssignments(assignments: AssignmentItem[]): string {
 }
 
 export default function StudyGuidePage() {
+  const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const [dashboardState, setDashboardState] = useState<PersistedDashboardState>({
@@ -117,9 +144,15 @@ export default function StudyGuidePage() {
   const [uploadMessage, setUploadMessage] = useState("No files added yet.");
 
   const [studyGuide, setStudyGuide] = useState<StudyGuideResult | null>(null);
+  const [studyGuideStructured, setStudyGuideStructured] = useState<StudyGuideStructured | null>(null);
   const [checkedItems, setCheckedItems] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [showBuilderDetails, setShowBuilderDetails] = useState(true);
+  const [chatInput, setChatInput] = useState("");
+  const [chatMessages, setChatMessages] = useState<GuideChatMessage[]>([]);
+  const [chatLoading, setChatLoading] = useState(false);
+  const [hasPendingGuideUpdate, setHasPendingGuideUpdate] = useState(false);
 
   useEffect(() => {
     try {
@@ -298,6 +331,27 @@ export default function StudyGuidePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           goals: ["Raise grade", "Target weak concepts", "Improve assignment performance"],
+          userPrompt: userInput.trim(),
+          conversationContext: chatMessages
+            .map((message) => `${message.role === "user" ? "User" : "AI"}: ${message.content}`)
+            .join("\n")
+            .slice(0, 2400),
+          selectedUnits,
+          selectedCourse: selectedCourseId
+            ? {
+                id: selectedCourseId,
+                name: dashboardState.courses.find((course) => course.id === selectedCourseId)?.name ?? "Selected Course",
+                currentScore:
+                  dashboardState.courses.find((course) => course.id === selectedCourseId)?.enrollments?.[0]
+                    ?.computed_current_score ?? null,
+              }
+            : undefined,
+          selectedAssignments: selectedAssignments.map((item) => ({
+            name: item.name,
+            submissionScore: item.submissionScore ?? null,
+            pointsPossible: item.pointsPossible ?? null,
+            conceptHint: item.conceptHint,
+          })),
           courses: dashboardState.courses.map((course) => ({
             id: course.id,
             name: course.name,
@@ -327,7 +381,10 @@ export default function StudyGuidePage() {
       }
 
       const generated = json.studyGuide as StudyGuideResult;
+      const structured = (json.studyGuideStructured ?? null) as StudyGuideStructured | null;
       setStudyGuide(generated);
+      setStudyGuideStructured(structured);
+      setHasPendingGuideUpdate(false);
       window.localStorage.setItem(
         LATEST_STUDY_GUIDE_KEY,
         JSON.stringify({
@@ -346,8 +403,10 @@ export default function StudyGuidePage() {
           selectedAssignments: selectedAssignments.map((item) => ({ id: item.id, name: item.name })),
           userInput,
           studyGuide: generated,
+          studyGuideStructured: structured,
         },
       });
+      window.localStorage.setItem(HIDE_STUDY_GUIDE_RESUME_KEY, "0");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate study guide");
     } finally {
@@ -355,10 +414,60 @@ export default function StudyGuidePage() {
     }
   }
 
+  async function sendGuideChat() {
+    const prompt = chatInput.trim();
+    if (!prompt || !studyGuide) {
+      return;
+    }
+
+    setChatLoading(true);
+    setError("");
+    const nextMessages: GuideChatMessage[] = [
+      ...chatMessages,
+      { role: "user", content: prompt, createdAt: Date.now() },
+    ];
+    setChatMessages(nextMessages);
+    setChatInput("");
+
+    try {
+      const response = await fetch("/api/ai/study-guide-chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: prompt,
+          selectedCourse: dashboardState.courses.find((course) => course.id === selectedCourseId)?.name,
+          studyGuideOverview: studyGuide.overview,
+          topicOutline: studyGuide.topicOutline?.concepts ?? [],
+          checklist: studyGuide.checklist,
+        }),
+      });
+
+      const json = await response.json();
+      if (!response.ok) {
+        throw new Error(json.error ?? "Failed to send guide message");
+      }
+
+      setChatMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: String(json.response ?? ""), createdAt: Date.now() },
+      ]);
+      setHasPendingGuideUpdate(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send guide message");
+    } finally {
+      setChatLoading(false);
+    }
+  }
+
   function clearStudyGuideOutput() {
     setStudyGuide(null);
+    setStudyGuideStructured(null);
     setCheckedItems({});
+    setChatMessages([]);
+    setChatInput("");
+    setHasPendingGuideUpdate(false);
     setError("");
+    window.localStorage.setItem(HIDE_STUDY_GUIDE_RESUME_KEY, "1");
   }
 
   useEffect(() => {
@@ -378,6 +487,7 @@ export default function StudyGuidePage() {
       selectedAssignments?: Array<{ id: number; name: string }>;
       userInput?: string;
       studyGuide?: StudyGuideResult;
+      studyGuideStructured?: StudyGuideStructured;
     };
 
     if (typeof state.selectedCourseId === "number") {
@@ -407,7 +517,46 @@ export default function StudyGuidePage() {
     if (state.studyGuide) {
       setStudyGuide(state.studyGuide);
     }
+    if (state.studyGuideStructured) {
+      setStudyGuideStructured(state.studyGuideStructured);
+    }
   }, [dashboardState.assignmentCache]);
+
+  function openTutorWithGuide() {
+    if (!studyGuide) {
+      router.push("/tutor");
+      return;
+    }
+
+    const selectedCourseName =
+      dashboardState.courses.find((course) => course.id === selectedCourseId)?.name ??
+      studyGuideStructured?.tutor_handoff?.context?.course?.name ??
+      "General";
+    const structuredTopics = (studyGuideStructured?.scope_lock?.topics ?? [])
+      .map((item) => item.topic)
+      .filter((item): item is string => typeof item === "string" && item.length > 0);
+    const topicList = structuredTopics.length > 0 ? structuredTopics : (studyGuide.topicOutline?.concepts ?? []);
+    const assessmentTitle = studyGuideStructured?.tutor_handoff?.context?.assessment?.title ?? "upcoming assessment";
+    const brief = studyGuideStructured?.tutor_handoff?.brief ?? "";
+    const checklist = studyGuide.checklist.slice(0, 8).join("; ");
+
+    const payload = {
+      source: "study-guide",
+      subject: selectedCourseName,
+      question: `Use my study guide context and tutor me on ${topicList.slice(0, 3).join(", ") || "my current topic"} for ${assessmentTitle}.`,
+      context: [
+        `Study guide overview: ${studyGuide.overview}`,
+        topicList.length > 0 ? `Guide topics: ${topicList.join(", ")}` : "",
+        brief ? `Tutor handoff: ${brief}` : "",
+        checklist ? `Checklist focus: ${checklist}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    };
+
+    window.localStorage.setItem(TUTOR_HANDOFF_KEY, JSON.stringify(payload));
+    router.push("/tutor?from=study-guide&autostart=1");
+  }
 
   return (
     <main className="grainy-bg min-h-screen px-6 py-10 md:px-10">
@@ -419,112 +568,123 @@ export default function StudyGuidePage() {
         </Button>
 
         <Card>
-          <CardTitle>Study Guide Builder</CardTitle>
-          <CardDescription>
-            Select course + assignments + units, add docs/images, then generate a bullet-based study plan with completion checkboxes.
-          </CardDescription>
-
-          <div className="mt-4 grid gap-3 md:grid-cols-2">
-            <select
-              value={selectedCourseId ?? ""}
-              onChange={(event) => {
-                const raw = event.target.value;
-                if (!raw) {
-                  setSelectedCourseId(null);
-                  setCourseAssignments([]);
-                  return;
-                }
-
-                const courseId = Number(raw);
-                setSelectedCourseId(courseId);
-                void loadAssignmentsForCourse(courseId);
-              }}
-              className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            >
-              <option value="">Select course</option>
-              {dashboardState.courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.name}
-                </option>
-              ))}
-            </select>
-
-            <div className="flex gap-2">
-              <input
-                value={assignmentSearch}
-                onChange={(event) => setAssignmentSearch(event.target.value)}
-                list="study-assignment-list"
-                placeholder="Search assignment"
-                className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-              />
-              <Button type="button" variant="secondary" onClick={addSelectedAssignment}>
-                Add
-              </Button>
-              <datalist id="study-assignment-list">
-                {filteredAssignments.map((assignment) => (
-                  <option key={assignment.id} value={assignment.name} />
-                ))}
-              </datalist>
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <CardTitle>Study Guide Builder</CardTitle>
+              <CardDescription>
+                Select course + assignments + units, add docs/images, then generate a bullet-based study plan with completion checkboxes.
+              </CardDescription>
             </div>
+            <Button type="button" variant="secondary" size="sm" onClick={() => setShowBuilderDetails((prev) => !prev)}>
+              {showBuilderDetails ? "Collapse Details" : "Reopen Details"}
+            </Button>
           </div>
 
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unit Selector</p>
-              <div className="flex gap-2">
+          {showBuilderDetails ? (
+            <>
+              <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <select
-                  defaultValue=""
+                  value={selectedCourseId ?? ""}
                   onChange={(event) => {
-                    const value = event.target.value;
-                    if (!value) {
+                    const raw = event.target.value;
+                    if (!raw) {
+                      setSelectedCourseId(null);
+                      setCourseAssignments([]);
                       return;
                     }
-                    setSelectedUnits((prev) => (prev.includes(value) ? prev : [...prev, value]));
-                    event.currentTarget.value = "";
+
+                    const courseId = Number(raw);
+                    setSelectedCourseId(courseId);
+                    void loadAssignmentsForCourse(courseId);
                   }}
-                  className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  className="h-10 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                 >
-                  <option value="">Choose detected unit</option>
-                  {availableUnits.map((unit) => (
-                    <option key={unit} value={unit}>
-                      {unit}
+                  <option value="">Select course</option>
+                  {dashboardState.courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.name}
                     </option>
                   ))}
                 </select>
-              </div>
-              <div className="flex gap-2">
-                <input
-                  value={customUnit}
-                  onChange={(event) => setCustomUnit(event.target.value)}
-                  placeholder="Add unit manually"
-                  className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    const unit = customUnit.trim();
-                    if (!unit) {
-                      return;
-                    }
-                    setSelectedUnits((prev) => (prev.includes(unit) ? prev : [...prev, unit]));
-                    setCustomUnit("");
-                  }}
-                >
-                  Add Unit
-                </Button>
-              </div>
-            </div>
 
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Files</p>
-              <input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.pdf,.docx" onChange={handleFiles} className="hidden" />
-              <Button type="button" className="w-full" onClick={() => fileInputRef.current?.click()}>
-                <Upload className="size-4" /> Add Images/Documents
-              </Button>
-              <p className="text-xs text-muted-foreground">{uploadMessage}</p>
-            </div>
-          </div>
+                <div className="flex gap-2">
+                  <input
+                    value={assignmentSearch}
+                    onChange={(event) => setAssignmentSearch(event.target.value)}
+                    list="study-assignment-list"
+                    placeholder="Search assignment"
+                    className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button type="button" variant="secondary" onClick={addSelectedAssignment}>
+                    Add
+                  </Button>
+                  <datalist id="study-assignment-list">
+                    {filteredAssignments.map((assignment) => (
+                      <option key={assignment.id} value={assignment.name} />
+                    ))}
+                  </datalist>
+                </div>
+              </div>
+
+              <div className="mt-3 grid gap-3 md:grid-cols-2">
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Unit Selector</p>
+                  <div className="flex gap-2">
+                    <select
+                      defaultValue=""
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (!value) {
+                          return;
+                        }
+                        setSelectedUnits((prev) => (prev.includes(value) ? prev : [...prev, value]));
+                        event.currentTarget.value = "";
+                      }}
+                      className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    >
+                      <option value="">Choose detected unit</option>
+                      {availableUnits.map((unit) => (
+                        <option key={unit} value={unit}>
+                          {unit}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="flex gap-2">
+                    <input
+                      value={customUnit}
+                      onChange={(event) => setCustomUnit(event.target.value)}
+                      placeholder="Add unit manually"
+                      className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    />
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        const unit = customUnit.trim();
+                        if (!unit) {
+                          return;
+                        }
+                        setSelectedUnits((prev) => (prev.includes(unit) ? prev : [...prev, unit]));
+                        setCustomUnit("");
+                      }}
+                    >
+                      Add Unit
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Files</p>
+                  <input ref={fileInputRef} type="file" multiple accept="image/*,.txt,.md,.pdf,.docx" onChange={handleFiles} className="hidden" />
+                  <Button type="button" className="w-full" onClick={() => fileInputRef.current?.click()}>
+                    <Upload className="size-4" /> Add Images/Documents
+                  </Button>
+                  <p className="text-xs text-muted-foreground">{uploadMessage}</p>
+                </div>
+              </div>
+            </>
+          ) : null}
 
           <div className="mt-4 grid gap-3 md:grid-cols-2">
             <div>
@@ -568,20 +728,70 @@ export default function StudyGuidePage() {
             </div>
           </div>
 
-          <div className="mt-4">
-            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Your Input</p>
-            <textarea
-              value={userInput}
-              onChange={(event) => setUserInput(event.target.value)}
-              placeholder="Add your own notes: goals, weak spots, exam date, preferred study method, time constraints..."
-              className="mt-2 h-28 w-full rounded-xl border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-            />
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Your Input</p>
+              <textarea
+                value={userInput}
+                onChange={(event) => setUserInput(event.target.value)}
+                placeholder="Add your own notes: goals, weak spots, exam date, preferred study method, time constraints..."
+                className="mt-2 h-28 w-full rounded-xl border bg-background p-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+              />
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">AI Chatbox</p>
+              <div className="mt-2 h-28 overflow-y-auto rounded-xl border bg-background p-3 text-sm">
+                {studyGuide ? (
+                  chatMessages.length > 0 ? (
+                    <div className="space-y-2">
+                      {chatMessages.slice(-3).map((message, index) => (
+                        <p key={`${message.createdAt}-${index}`} className={message.role === "user" ? "font-semibold" : "text-muted-foreground"}>
+                          {message.role === "user" ? "You: " : "AI: "}
+                          {message.content}
+                        </p>
+                      ))}
+                    </div>
+                  ) : studyGuide.clarificationQuestion ? (
+                    <>
+                      <p className="font-semibold">Clarification Needed</p>
+                      <p className="mt-1 text-muted-foreground">{studyGuide.clarificationQuestion}</p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="font-semibold">{studyGuide.topicOutline?.topic ?? "Latest guide response"}</p>
+                      <p className="mt-1 text-muted-foreground">{studyGuide.overview}</p>
+                    </>
+                  )
+                ) : (
+                  <p className="text-muted-foreground">AI response preview appears here after you generate the study guide.</p>
+                )}
+              </div>
+              {studyGuide ? (
+                <div className="mt-2 flex gap-2">
+                  <input
+                    value={chatInput}
+                    onChange={(event) => setChatInput(event.target.value)}
+                    placeholder="Ask AI to refine this guide..."
+                    className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                  />
+                  <Button type="button" onClick={sendGuideChat} disabled={chatLoading || !chatInput.trim()}>
+                    <SendHorizontal className="size-4" />
+                  </Button>
+                </div>
+              ) : null}
+            </div>
           </div>
 
           <div className="mt-5 flex flex-wrap gap-2">
-            <Button onClick={generateGuide} disabled={loading}>
-              <Sparkles className="size-4" /> {loading ? "Generating Study Guide..." : "Generate Study Guide"}
-            </Button>
+            {!studyGuide ? (
+              <Button onClick={generateGuide} disabled={loading}>
+                <Sparkles className="size-4" /> {loading ? "Generating Study Guide..." : "Generate Study Guide"}
+              </Button>
+            ) : (
+              <Button onClick={generateGuide} disabled={loading || !hasPendingGuideUpdate}>
+                <Sparkles className="size-4" /> {loading ? "Regenerating..." : "Regenerate with Context"}
+              </Button>
+            )}
             <Button type="button" variant="secondary" onClick={clearStudyGuideOutput} disabled={!studyGuide}>
               Clear Chat
             </Button>
@@ -595,6 +805,17 @@ export default function StudyGuidePage() {
             <Card>
               <CardTitle>Study Overview</CardTitle>
               <CardDescription>{studyGuide.overview}</CardDescription>
+              {studyGuide.topicOutline ? (
+                <div className="mt-3 rounded-xl border bg-background/70 p-3">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Topic Outline</p>
+                  <p className="mt-1 text-sm font-semibold">{studyGuide.topicOutline.topic}</p>
+                  <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+                    {studyGuide.topicOutline.concepts.map((concept) => (
+                      <li key={concept}>{concept}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <div className="mt-4 rounded-xl border bg-background/70 p-3">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Work Outline</p>
                 <div className="mt-2 space-y-2">
@@ -621,8 +842,8 @@ export default function StudyGuidePage() {
                   </div>
                 ))}
               </div>
-              <Button asChild className="mt-4">
-                <Link href="/tutor">Need more help? Open Tutor</Link>
+              <Button className="mt-4" onClick={openTutorWithGuide}>
+                Need more help? Open Tutor
               </Button>
             </Card>
 

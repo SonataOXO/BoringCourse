@@ -101,6 +101,8 @@ type ChatMessage = {
 };
 
 const INITIAL_TUTOR_MESSAGE = "Ask a question to start your tutoring session.";
+const TUTOR_HANDOFF_KEY = "boringcourse-tutor-handoff-v1";
+const HIDE_TUTOR_RESUME_KEY = "boringcourse-hide-resume-tutor-v1";
 
 type CourseFocusContext = {
   courseId: number;
@@ -153,6 +155,7 @@ export default function TutorPage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
   const focusAutoRanRef = useRef(false);
+  const handoffAutoRanRef = useRef(false);
 
   const [question, setQuestion] = useState("Explain what I should focus on first this week.");
   const [loading, setLoading] = useState(false);
@@ -169,6 +172,7 @@ export default function TutorPage() {
   const [images, setImages] = useState<TutorImage[]>([]);
   const [documents, setDocuments] = useState<TutorDocument[]>([]);
   const [uploadMessage, setUploadMessage] = useState("");
+  const [handoffContext, setHandoffContext] = useState("");
   const [selectedCourse, setSelectedCourse] = useState("");
   const [focusLoading, setFocusLoading] = useState(false);
   const [focusCoach, setFocusCoach] = useState<FocusCoachResult | null>(null);
@@ -311,6 +315,7 @@ export default function TutorPage() {
       .join("\n\n");
 
     return [
+      handoffContext ? `Study guide handoff:\n${handoffContext}` : "",
       focusBlock ? `Focus recommendations: ${focusBlock}` : "",
       upcomingBlock ? `Upcoming Canvas work: ${upcomingBlock}` : "",
       uploadBlock,
@@ -318,14 +323,15 @@ export default function TutorPage() {
     ]
       .filter(Boolean)
       .join("\n\n");
-  }, [dashboardState, documents]);
+  }, [dashboardState, documents, handoffContext]);
 
-  async function askTutor() {
+  const askTutor = useCallback(async (overrides?: { question?: string; subject?: string; extraContext?: string }) => {
     setError("");
     setLoading(true);
 
     try {
-      const trimmedQuestion = question.trim();
+      const subjectToUse = overrides?.subject?.trim() || subject;
+      const trimmedQuestion = (overrides?.question ?? question).trim();
       if (!trimmedQuestion) {
         setError("Enter a question first.");
         return;
@@ -341,8 +347,8 @@ export default function TutorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question: trimmedQuestion,
-          subject,
-          context: context.slice(0, 7000),
+          subject: subjectToUse,
+          context: [context, overrides?.extraContext ?? ""].filter(Boolean).join("\n\n").slice(0, 7000),
           chatHistory: chatMessages.slice(-8).map((message) => ({
             role: message.role,
             content: message.content.slice(0, 500),
@@ -386,22 +392,23 @@ export default function TutorPage() {
       appendHistory({
         type: "tutor",
         title: "Tutor response",
-        summary: `${subject}: ${trimmedQuestion.slice(0, 80)}`,
+        summary: `${subjectToUse}: ${trimmedQuestion.slice(0, 80)}`,
         path: "/tutor",
         state: {
-          subject,
+          subject: subjectToUse,
           chatMessages: [
             { role: "user", content: trimmedQuestion, createdAt: Date.now() - 1 },
             { role: "assistant", content: tutorAnswer, createdAt: Date.now() },
           ],
         },
       });
+      window.localStorage.setItem(HIDE_TUTOR_RESUME_KEY, "0");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Tutor request failed");
     } finally {
       setLoading(false);
     }
-  }
+  }, [chatMessages, context, dashboardState.focusRecommendations, images, question, subject]);
 
   async function handleImagePick(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []).slice(0, 5);
@@ -463,6 +470,51 @@ export default function TutorPage() {
       event.target.value = "";
     }
   }
+
+  useEffect(() => {
+    if (handoffAutoRanRef.current) {
+      return;
+    }
+
+    const raw = window.localStorage.getItem(TUTOR_HANDOFF_KEY);
+    if (!raw) {
+      handoffAutoRanRef.current = true;
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(raw) as {
+        source?: string;
+        subject?: string;
+        question?: string;
+        context?: string;
+      };
+
+      const handoffQuestion = parsed.question?.trim() ?? "";
+      const handoffSubject = parsed.subject?.trim() ?? "";
+      const handoffExtraContext = parsed.context?.trim() ?? "";
+
+      if (handoffSubject) {
+        setSelectedCourse(handoffSubject);
+      }
+      if (handoffExtraContext) {
+        setHandoffContext(handoffExtraContext);
+      }
+      if (handoffQuestion) {
+        setQuestion(handoffQuestion);
+        void askTutor({
+          question: handoffQuestion,
+          subject: handoffSubject || undefined,
+          extraContext: handoffExtraContext || undefined,
+        });
+      }
+    } catch {
+      // Ignore malformed handoff payload.
+    } finally {
+      window.localStorage.removeItem(TUTOR_HANDOFF_KEY);
+      handoffAutoRanRef.current = true;
+    }
+  }, [askTutor]);
 
   const runFocusAnalysis = useCallback(async (selectedOption?: FocusOption) => {
     setError("");
@@ -612,6 +664,7 @@ export default function TutorPage() {
     setMcqSelections({});
     setQuestion("");
     setError("");
+    window.localStorage.setItem(HIDE_TUTOR_RESUME_KEY, "1");
   }
 
   useEffect(() => {
@@ -912,7 +965,7 @@ export default function TutorPage() {
               <Button type="button" variant="secondary" onClick={() => documentInputRef.current?.click()}>
                 Documents
               </Button>
-              <Button onClick={askTutor} disabled={loading}>
+              <Button onClick={() => void askTutor()} disabled={loading}>
                 <Brain className="size-4" /> {loading ? "Thinking..." : "Send"}
               </Button>
             </div>
