@@ -1,0 +1,46 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fffdf7;
+  --foreground: #1c1b19;
+  --muted: #f3ebd9;
+  --muted-foreground: #706754;
+  --card: #fff9ec;
+  --card-foreground: #2a2319;
+  --border: #e4d7bd;
+  --accent: #e56b2f;
+  --accent-foreground: #fff8ef;
+  --ring: #d55a1f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-border: var(--border);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-ring: var(--ring);
+  --font-sans: var(--font-space-grotesk);
+  --font-serif: var(--font-source-serif);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-space-grotesk), sans-serif;
+}
+
+* {
+  border-color: var(--border);
+}
+
+.grainy-bg {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(229, 107, 47, 0.13), transparent 34%),
+    radial-gradient(circle at 78% 10%, rgba(0, 122, 92, 0.1), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(222, 182, 93, 0.2), transparent 36%);
+}
