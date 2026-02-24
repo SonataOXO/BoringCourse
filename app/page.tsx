@@ -96,6 +96,7 @@ type PersistedDashboardState = {
 };
 
 const DASHBOARD_STORAGE_KEY = "boringcourse-dashboard-v1";
+const LATEST_STUDY_GUIDE_KEY = "boringcourse-latest-study-guide-v1";
 
 const fallbackUpcoming: AssignmentItem[] = [
   { id: 1, name: "Lab Report Draft", dueAt: null, type: "Assignment" },
@@ -211,6 +212,7 @@ export default function Home() {
   const [aiUnitConcepts, setAiUnitConcepts] = useState<Record<string, string[]>>({});
   const [aiUnitConceptsLoading, setAiUnitConceptsLoading] = useState<Record<string, boolean>>({});
   const [hasStudyGuideHistory, setHasStudyGuideHistory] = useState(false);
+  const [latestStudyTimeline, setLatestStudyTimeline] = useState<Array<{ day: string; tasks: string[]; minutes: number }>>([]);
 
   useEffect(() => {
     try {
@@ -256,7 +258,27 @@ export default function Home() {
   useEffect(() => {
     const refreshStudyGuideState = () => {
       const hasGuide = readHistory().some((item) => item.type === "study-guide");
-      setHasStudyGuideHistory(hasGuide);
+      let hasTimeline = false;
+      try {
+        const raw = window.localStorage.getItem(LATEST_STUDY_GUIDE_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw) as { plan?: Array<{ day?: string; tasks?: string[]; minutes?: number }> };
+          const plan = (parsed.plan ?? [])
+            .filter((item) => typeof item?.day === "string")
+            .map((item) => ({
+              day: String(item.day),
+              tasks: Array.isArray(item.tasks) ? item.tasks.map((task) => String(task)) : [],
+              minutes: Number(item.minutes ?? 45),
+            }));
+          if (plan.length > 0) {
+            hasTimeline = true;
+            setLatestStudyTimeline(plan);
+          }
+        }
+      } catch {
+        // Ignore malformed local timeline.
+      }
+      setHasStudyGuideHistory(hasGuide || hasTimeline);
     };
 
     refreshStudyGuideState();
@@ -748,10 +770,12 @@ export default function Home() {
     }
   }
 
-  const displayedTimeline = [
-    { day: "Monday", tasks: ["Pick class, unit, and assignments"], minutes: 45 },
-    { day: "Wednesday", tasks: ["Upload docs/images and generate checklist"], minutes: 45 },
-  ];
+  const displayedTimeline = latestStudyTimeline.length > 0
+    ? latestStudyTimeline
+    : [
+        { day: "Monday", tasks: ["Pick class, unit, and assignments"], minutes: 45 },
+        { day: "Wednesday", tasks: ["Upload docs/images and generate checklist"], minutes: 45 },
+      ];
 
   const firstFlashcard = flashcards[0];
   const firstQuiz = quiz[0];

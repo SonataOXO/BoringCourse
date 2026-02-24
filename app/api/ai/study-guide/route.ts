@@ -30,25 +30,26 @@ const requestSchema = z.object({
 });
 
 const fallback = {
-  overview: "Focus on highest-priority classes first and study in short daily blocks.",
+  overview: "Use focused blocks on your selected course concepts and verify understanding with practice.",
   plan: [
     {
       day: "Monday",
-      tasks: ["Review weak concepts", "Complete one active assignment"],
+      tasks: ["Review the target concept definitions", "Solve 6 guided practice questions"],
       minutes: 60,
     },
   ],
   priorities: [
     {
-      subject: "General",
-      reason: "No detailed data provided.",
-      action: "Upload assignments and sync Canvas to personalize.",
+      subject: "Selected Course",
+      reason: "Concentrate on current unit concepts before moving to older topics.",
+      action: "Start with weakest concept first, then practice and self-check errors.",
     },
   ],
   checklist: [
-    "Review one weak concept from your lowest-scoring assignment",
-    "Complete 10 practice problems and check errors",
-    "Do a 20-minute active recall session",
+    "Define the target concept in your own words",
+    "Identify the formula/rule used for this concept",
+    "Solve 5 problems on this exact concept",
+    "Explain one common mistake and how to avoid it",
   ],
 };
 
@@ -67,10 +68,13 @@ export async function POST(request: NextRequest) {
     const systemPrompt = [
       "You are an expert academic coach.",
       "Return only valid JSON.",
-      "Build a high-signal study guide with specific, actionable tasks.",
+      "Build a detailed, high-signal study guide with specific, actionable tasks.",
       "Use grades and focus recommendations to allocate time.",
-      "Include a concise checklist of study bullets.",
-      "Checklist bullets should be short (max 14 words each).",
+      "Checklist must contain specific concepts to understand, not generic study habits.",
+      "Each checklist item must name a concept, skill, or formula from provided context.",
+      "Include a clear outline of what to work on first, second, and third in priorities/action.",
+      "Plan tasks should be concrete and tied to selected assignments/units when available.",
+      "Checklist bullets should be short (max 16 words each).",
       "Do not include markdown fences.",
       "JSON shape: { overview: string, plan: Array<{day:string,tasks:string[],minutes:number}>, priorities: Array<{subject:string,reason:string,action:string}>, checklist: string[] }",
     ].join(" ");

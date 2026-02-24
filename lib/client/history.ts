@@ -7,6 +7,7 @@ export type HistoryItem = {
   summary: string;
   createdAt: string;
   path: string;
+  state?: Record<string, unknown>;
 };
 
 const HISTORY_STORAGE_KEY = "boringcourse-history-v1";
@@ -52,6 +53,15 @@ export function appendHistory(
   window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
   window.dispatchEvent(new Event(HISTORY_EVENT_NAME));
   return next;
+}
+
+export function getHistoryItemById(id: string): HistoryItem | null {
+  if (!id) {
+    return null;
+  }
+
+  const items = readHistory();
+  return items.find((item) => item.id === id) ?? null;
 }
 
 export function clearHistory(): void {

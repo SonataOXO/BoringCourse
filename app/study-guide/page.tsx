@@ -7,7 +7,7 @@ import { ArrowLeft, CheckSquare, FileText, Sparkles, Upload } from "lucide-react
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { getCanvasAuthHeaders } from "@/lib/client/canvas-auth";
-import { appendHistory } from "@/lib/client/history";
+import { appendHistory, getHistoryItemById } from "@/lib/client/history";
 
 type FocusRecommendation = {
   subject: string;
@@ -65,6 +65,7 @@ type LocalImage = {
 
 const DASHBOARD_STORAGE_KEY = "boringcourse-dashboard-v1";
 const CHECKLIST_STORAGE_KEY = "boringcourse-study-checks-v1";
+const LATEST_STUDY_GUIDE_KEY = "boringcourse-latest-study-guide-v1";
 
 function extractUnitTag(title: string): string | null {
   const match = title.match(/\b(unit\s*\d+|chapter\s*\d+|module\s*\d+|lesson\s*\d+)\b/i);
@@ -204,13 +205,14 @@ export default function StudyGuidePage() {
   }
 
   function addSelectedAssignment() {
-    const target = filteredAssignments.find((item) => item.name.toLowerCase() === assignmentSearch.trim().toLowerCase());
+    const query = assignmentSearch.trim().toLowerCase();
+    const target = filteredAssignments.find((item) => item.name.toLowerCase() === query) ?? filteredAssignments[0];
     if (!target) {
       return;
     }
 
     setSelectedAssignments((prev) => {
-      if (prev.some((item) => item.id === target.id)) {
+      if (prev.some((item) => item.id === target.id && item.name === target.name)) {
         return prev;
       }
       return [...prev, target];
@@ -326,11 +328,25 @@ export default function StudyGuidePage() {
 
       const generated = json.studyGuide as StudyGuideResult;
       setStudyGuide(generated);
+      window.localStorage.setItem(
+        LATEST_STUDY_GUIDE_KEY,
+        JSON.stringify({
+          plan: generated.plan ?? [],
+          updatedAt: new Date().toISOString(),
+        }),
+      );
       appendHistory({
         type: "study-guide",
         title: "Study guide generated",
         summary: `${selectedCourseId ? "Course selected" : "General"} • ${generated.checklist.length} checklist items`,
         path: "/study-guide",
+        state: {
+          selectedCourseId,
+          selectedUnits,
+          selectedAssignments: selectedAssignments.map((item) => ({ id: item.id, name: item.name })),
+          userInput,
+          studyGuide: generated,
+        },
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to generate study guide");
@@ -344,6 +360,54 @@ export default function StudyGuidePage() {
     setCheckedItems({});
     setError("");
   }
+
+  useEffect(() => {
+    const historyId = new URLSearchParams(window.location.search).get("historyId");
+    if (!historyId) {
+      return;
+    }
+
+    const historyItem = getHistoryItemById(historyId);
+    if (!historyItem || historyItem.type !== "study-guide" || !historyItem.state) {
+      return;
+    }
+
+    const state = historyItem.state as {
+      selectedCourseId?: number | null;
+      selectedUnits?: string[];
+      selectedAssignments?: Array<{ id: number; name: string }>;
+      userInput?: string;
+      studyGuide?: StudyGuideResult;
+    };
+
+    if (typeof state.selectedCourseId === "number") {
+      setSelectedCourseId(state.selectedCourseId);
+      const cachedAssignments = dashboardState.assignmentCache?.[state.selectedCourseId] ?? [];
+      setCourseAssignments(cachedAssignments);
+    }
+
+    if (Array.isArray(state.selectedUnits)) {
+      setSelectedUnits(state.selectedUnits);
+    }
+
+    if (Array.isArray(state.selectedAssignments) && state.selectedAssignments.length > 0) {
+      const allAssignments = Object.values(dashboardState.assignmentCache ?? {}).flat();
+      const restoredAssignments = state.selectedAssignments
+        .map((saved) => allAssignments.find((item) => item.id === saved.id && item.name === saved.name))
+        .filter(Boolean) as AssignmentItem[];
+      if (restoredAssignments.length > 0) {
+        setSelectedAssignments(restoredAssignments);
+      }
+    }
+
+    if (typeof state.userInput === "string") {
+      setUserInput(state.userInput);
+    }
+
+    if (state.studyGuide) {
+      setStudyGuide(state.studyGuide);
+    }
+  }, [dashboardState.assignmentCache]);
 
   return (
     <main className="grainy-bg min-h-screen px-6 py-10 md:px-10">
@@ -467,11 +531,15 @@ export default function StudyGuidePage() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Selected Assignments</p>
               <div className="mt-2 space-y-2">
                 {selectedAssignments.length > 0 ? selectedAssignments.map((item) => (
-                  <div key={item.id} className="flex items-center justify-between rounded-xl border bg-background/70 p-2 text-sm">
+                  <div key={`${item.id}-${item.name}`} className="flex items-center justify-between rounded-xl border bg-background/70 p-2 text-sm">
                     <span className="truncate">{item.name}</span>
                     <button
                       type="button"
-                      onClick={() => setSelectedAssignments((prev) => prev.filter((assignment) => assignment.id !== item.id))}
+                      onClick={() =>
+                        setSelectedAssignments((prev) =>
+                          prev.filter((assignment) => !(assignment.id === item.id && assignment.name === item.name)),
+                        )
+                      }
                       className="text-xs text-muted-foreground hover:text-foreground"
                     >
                       Remove
@@ -484,7 +552,17 @@ export default function StudyGuidePage() {
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Selected Units</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {selectedUnits.length > 0 ? selectedUnits.map((unit) => (
-                  <span key={unit} className="rounded-full border bg-background/70 px-3 py-1 text-xs">{unit}</span>
+                  <span key={unit} className="inline-flex items-center gap-2 rounded-full border bg-background/70 px-3 py-1 text-xs">
+                    {unit}
+                    <button
+                      type="button"
+                      onClick={() => setSelectedUnits((prev) => prev.filter((item) => item !== unit))}
+                      className="text-muted-foreground hover:text-foreground"
+                      aria-label={`Remove ${unit}`}
+                    >
+                      x
+                    </button>
+                  </span>
                 )) : <p className="text-sm text-muted-foreground">No units selected yet.</p>}
               </div>
             </div>
@@ -517,6 +595,20 @@ export default function StudyGuidePage() {
             <Card>
               <CardTitle>Study Overview</CardTitle>
               <CardDescription>{studyGuide.overview}</CardDescription>
+              <div className="mt-4 rounded-xl border bg-background/70 p-3">
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Work Outline</p>
+                <div className="mt-2 space-y-2">
+                  {studyGuide.priorities.slice(0, 3).map((item, index) => (
+                    <div key={`${item.subject}-${index}`} className="rounded-lg border bg-background p-2">
+                      <p className="text-sm font-semibold">
+                        {index + 1}. {item.subject}
+                      </p>
+                      <p className="text-xs text-muted-foreground">{item.reason}</p>
+                      <p className="mt-1 text-xs">{item.action}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="mt-4 space-y-3">
                 {studyGuide.plan.map((item) => (
                   <div key={item.day} className="rounded-xl border bg-background/70 p-3">
@@ -529,6 +621,9 @@ export default function StudyGuidePage() {
                   </div>
                 ))}
               </div>
+              <Button asChild className="mt-4">
+                <Link href="/tutor">Need more help? Open Tutor</Link>
+              </Button>
             </Card>
 
             <Card>

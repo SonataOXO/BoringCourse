@@ -7,7 +7,7 @@ import { ArrowLeft, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { getCanvasAuthHeaders } from "@/lib/client/canvas-auth";
-import { appendHistory } from "@/lib/client/history";
+import { appendHistory, getHistoryItemById } from "@/lib/client/history";
 
 type FocusRecommendation = {
   subject: string;
@@ -388,6 +388,13 @@ export default function TutorPage() {
         title: "Tutor response",
         summary: `${subject}: ${trimmedQuestion.slice(0, 80)}`,
         path: "/tutor",
+        state: {
+          subject,
+          chatMessages: [
+            { role: "user", content: trimmedQuestion, createdAt: Date.now() - 1 },
+            { role: "assistant", content: tutorAnswer, createdAt: Date.now() },
+          ],
+        },
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Tutor request failed");
@@ -618,6 +625,38 @@ export default function TutorPage() {
       void runFocusAnalysis();
     }
   }, [runFocusAnalysis]);
+
+  useEffect(() => {
+    const historyId = new URLSearchParams(window.location.search).get("historyId");
+    if (!historyId) {
+      return;
+    }
+
+    const historyItem = getHistoryItemById(historyId);
+    if (!historyItem || historyItem.type !== "tutor" || !historyItem.state) {
+      return;
+    }
+
+    const state = historyItem.state as {
+      subject?: string;
+      chatMessages?: Array<{ role: "user" | "assistant"; content: string; createdAt?: number }>;
+    };
+
+    if (state.subject) {
+      setSelectedCourse(state.subject);
+    }
+
+    if (Array.isArray(state.chatMessages) && state.chatMessages.length > 0) {
+      setChatMessages(
+        state.chatMessages.map((message, index) => ({
+          id: `restored-${historyId}-${index}`,
+          role: message.role,
+          content: message.content,
+          createdAt: Number(message.createdAt ?? Date.now()),
+        })),
+      );
+    }
+  }, []);
 
   return (
     <main className="grainy-bg min-h-screen px-6 py-10 md:px-10">

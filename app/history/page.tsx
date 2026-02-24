@@ -44,7 +44,11 @@ export default function HistoryPage() {
           <div className="mt-4 space-y-2">
             {historyItems.length > 0 ? (
               historyItems.map((item) => (
-                <Link key={item.id} href={item.path} className="block rounded-xl border bg-background/70 p-3 hover:bg-muted">
+                <Link
+                  key={item.id}
+                  href={`${item.path}${item.path.includes("?") ? "&" : "?"}historyId=${encodeURIComponent(item.id)}`}
+                  className="block rounded-xl border bg-background/70 p-3 hover:bg-muted"
+                >
                   <p className="text-sm font-semibold">{item.title}</p>
                   <p className="text-sm text-muted-foreground">{item.summary}</p>
                   <p className="text-xs text-muted-foreground">{new Date(item.createdAt).toLocaleString()}</p>
