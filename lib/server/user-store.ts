@@ -36,8 +36,13 @@ function verifyPassword(password: string, stored: string): boolean {
 }
 
 async function ensureSchema() {
+  const resolvedUrl = process.env.POSTGRES_URL ?? process.env.DATABASE_URL;
+  if (!resolvedUrl) {
+    throw new Error("POSTGRES_URL or DATABASE_URL is not set. Configure a persistent database for multi-device login.");
+  }
   if (!process.env.POSTGRES_URL) {
-    throw new Error("POSTGRES_URL is not set. Configure a persistent database for multi-device login.");
+    // @vercel/postgres reads POSTGRES_URL. Allow Neon/Vercel integrations that provide DATABASE_URL.
+    process.env.POSTGRES_URL = resolvedUrl;
   }
 
   if (schemaReady) {
