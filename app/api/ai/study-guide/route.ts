@@ -183,6 +183,17 @@ function extractTopicTokens(question: string): string[] {
     "build",
     "please",
     "me",
+    "what",
+    "should",
+    "could",
+    "would",
+    "can",
+    "how",
+    "when",
+    "where",
+    "why",
+    "which",
+    "tell",
   ]);
   return Array.from(
     new Set(
@@ -193,6 +204,33 @@ function extractTopicTokens(question: string): string[] {
         .filter((token) => token.length > 2 && !stopWords.has(token)),
     ),
   ).slice(0, 10);
+}
+
+function isJunkTopic(value: string): boolean {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  const junkWords = new Set([
+    "what",
+    "should",
+    "could",
+    "would",
+    "can",
+    "how",
+    "when",
+    "where",
+    "why",
+    "which",
+    "make",
+    "create",
+    "build",
+    "study",
+    "guide",
+    "quiz",
+    "test",
+  ]);
+  return junkWords.has(normalized);
 }
 
 function extractPromptConcepts(prompt: string): string[] {
@@ -273,7 +311,10 @@ function defaultGuide(body: z.infer<typeof requestSchema>, topicTokens: string[]
     ? promptConcepts
     : topicTokens.map((token) => token.replace(/\b\w/g, (c) => c.toUpperCase()));
 
-  const baseTopics = Array.from(new Set([...explicit, ...unitTopics, ...promptTopics, ...inferred])).slice(0, 8);
+  const baseTopics = Array.from(new Set([...explicit, ...unitTopics, ...promptTopics, ...inferred]))
+    .map((topic) => String(topic).trim())
+    .filter((topic) => !isJunkTopic(topic))
+    .slice(0, 8);
   const topics: Topic[] = baseTopics.map((topic) => {
     const topicLower = topic.toLowerCase();
     const direct = assignmentNames.some((name) => name.toLowerCase().includes(topicLower)) || explicit.some((name) => String(name).toLowerCase() === topicLower);
@@ -613,6 +654,10 @@ function normalizeGuide(candidate: unknown, fallback: GeneratorOutput): Generato
 
   if (merged.scope_lock.topics.length === 0) {
     merged.scope_lock.topics = fallback.scope_lock.topics;
+  }
+  merged.scope_lock.topics = merged.scope_lock.topics.filter((topic) => !isJunkTopic(topic.topic));
+  if (merged.scope_lock.topics.length === 0) {
+    merged.scope_lock.topics = fallback.scope_lock.topics.filter((topic) => !isJunkTopic(topic.topic));
   }
 
   const chips = merged.scope_lock.topics.map((topic) => topic.topic).filter(Boolean);
