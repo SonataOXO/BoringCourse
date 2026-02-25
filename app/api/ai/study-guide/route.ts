@@ -160,7 +160,30 @@ function safeArray<T>(value: unknown, fallback: T[]): T[] {
 }
 
 function extractTopicTokens(question: string): string[] {
-  const stopWords = new Set(["i", "need", "help", "with", "the", "a", "an", "for", "to", "on", "and", "of", "my", "quiz", "test", "study", "guide"]);
+  const stopWords = new Set([
+    "i",
+    "need",
+    "help",
+    "with",
+    "the",
+    "a",
+    "an",
+    "for",
+    "to",
+    "on",
+    "and",
+    "of",
+    "my",
+    "quiz",
+    "test",
+    "study",
+    "guide",
+    "make",
+    "create",
+    "build",
+    "please",
+    "me",
+  ]);
   return Array.from(
     new Set(
       question
@@ -172,12 +195,49 @@ function extractTopicTokens(question: string): string[] {
   ).slice(0, 10);
 }
 
+function extractPromptConcepts(prompt: string): string[] {
+  const text = prompt.toLowerCase();
+  const concepts: string[] = [];
+  if (/\b(quadratic|quadratics|qudartic|qudratic)\b/.test(text)) {
+    concepts.push("Quadratic functions");
+  }
+  if (/\bvertex\b/.test(text)) {
+    concepts.push("Vertex and axis of symmetry");
+  }
+  if (/\bfactor(ing)?\b/.test(text)) {
+    concepts.push("Factoring quadratics");
+  }
+  if (/\bcomplete(ing)? the square\b/.test(text)) {
+    concepts.push("Completing the square");
+  }
+  if (/\bquadratic formula\b/.test(text)) {
+    concepts.push("Quadratic formula");
+  }
+  if (/\bdiscriminant\b/.test(text)) {
+    concepts.push("Discriminant and number of roots");
+  }
+  if (/\bcomplex\b/.test(text)) {
+    concepts.push("Complex roots");
+  }
+  return Array.from(new Set(concepts));
+}
+
 function inferLikelyTopics(courseName: string, prompt: string): string[] {
   const text = `${courseName} ${prompt}`.toLowerCase();
+  const wantsQuadratics = /\b(quadratic|quadratics|qudartic|qudratic)\b/.test(text);
   if (text.includes("algebra 1") || text.includes("algebra i")) {
     return ["Linear equations", "Systems of equations", "Exponents and polynomials"];
   }
   if (text.includes("algebra 2") || text.includes("algebra ii")) {
+    if (wantsQuadratics) {
+      return [
+        "Quadratic functions",
+        "Graphing parabolas",
+        "Factoring quadratics",
+        "Completing the square",
+        "Quadratic formula and discriminant",
+      ];
+    }
     return ["Quadratic functions", "Polynomial operations", "Rational expressions"];
   }
   if (text.includes("chem") || text.includes("chemistry")) {
@@ -208,7 +268,10 @@ function defaultGuide(body: z.infer<typeof requestSchema>, topicTokens: string[]
   const inferred = inferLikelyTopics(body.selectedCourse?.name ?? "", body.userPrompt ?? "");
   const explicit = body.selectedAssignments.map((a) => a.conceptHint || a.name).filter(Boolean);
   const unitTopics = body.selectedUnits;
-  const promptTopics = topicTokens.map((token) => token.replace(/\b\w/g, (c) => c.toUpperCase()));
+  const promptConcepts = extractPromptConcepts(body.userPrompt ?? "");
+  const promptTopics = promptConcepts.length > 0
+    ? promptConcepts
+    : topicTokens.map((token) => token.replace(/\b\w/g, (c) => c.toUpperCase()));
 
   const baseTopics = Array.from(new Set([...explicit, ...unitTopics, ...promptTopics, ...inferred])).slice(0, 8);
   const topics: Topic[] = baseTopics.map((topic) => {
