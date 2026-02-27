@@ -693,6 +693,22 @@ function toLegacyGuide(generated: GeneratorOutput, userPrompt?: string): LegacyG
   const finalTopics = (finalReviewSection?.timed_set ?? [])
     .map((item) => item.topic)
     .filter((item): item is string => typeof item === "string" && item.length > 0);
+  const genericTopicWords = new Set(["algebra", "math", "mathematics", "general", "topic", "concept"]);
+  const specificTopics = Array.from(
+    new Set([...practiceTopics, ...diagnosticTopics, ...finalTopics, ...topics.map((item) => item.topic)]),
+  ).filter((topic) => {
+    const lowered = topic.trim().toLowerCase();
+    if (!lowered) {
+      return false;
+    }
+    if (genericTopicWords.has(lowered)) {
+      return false;
+    }
+    return lowered.split(/\s+/).some((part) => !genericTopicWords.has(part));
+  });
+  const primaryTopic = specificTopics[0] ?? topics[0]?.topic ?? userPrompt?.trim() ?? "current quiz topic";
+  const secondaryTopic = specificTopics[1] ?? specificTopics[0] ?? primaryTopic;
+  const tertiaryTopic = specificTopics[2] ?? secondaryTopic;
 
   const priorities = topics.slice(0, 3).map((topic) => ({
     subject: `${topic.topic} (${topic.badge})`,
@@ -701,14 +717,14 @@ function toLegacyGuide(generated: GeneratorOutput, userPrompt?: string): LegacyG
   }));
 
   const mondayTasks = [
-    diagnosticTopics[0] ? `Run diagnostic first on ${diagnosticTopics[0]}` : "Run full diagnostic first",
-    practiceTopics[0] ? `Complete practice set for ${practiceTopics[0]} and check each solution step` : "Complete one topic practice set and check each step",
-    checklistTasks[0] ?? "Fix one repeated mistake from diagnostic",
+    `Run a 10-minute diagnostic on ${primaryTopic} and mark each missed step.`,
+    `Complete 6 targeted ${primaryTopic} problems; write 1-line justification per solution.`,
+    `Correct your top 2 recurring errors in ${secondaryTopic} and re-solve those items.`,
   ];
   const wednesdayTasks = [
-    practiceTopics[1] ? `Complete second practice set for ${practiceTopics[1]} with timed pacing` : "Do mixed timed practice across two topics",
-    finalTopics[0] ? `Run final-review timed question on ${finalTopics[0]}` : "Run the 10-minute final review simulation",
-    checklistTasks[1] ?? "Redo missed items and verify no repeated trap",
+    `Do a timed mixed set: 4 ${secondaryTopic} + 4 ${tertiaryTopic} questions (20 minutes).`,
+    `Run a final-review simulation on ${primaryTopic} and ${secondaryTopic}; target >= 80% accuracy.`,
+    `Create a mini cheat-sheet of 5 rules/formulas for ${primaryTopic} and self-quiz without notes.`,
   ];
 
   return {

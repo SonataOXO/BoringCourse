@@ -61,11 +61,6 @@ type UploadedMaterial = {
   wordCount: number;
 };
 
-type Flashcard = {
-  question: string;
-  answer: string;
-};
-
 type QuizQuestion = {
   prompt: string;
   options: string[];
@@ -237,9 +232,6 @@ export default function Home() {
   const [assignmentCache, setAssignmentCache] = useState<AssignmentCache>({});
 
   const [uploadedMaterials, setUploadedMaterials] = useState<UploadedMaterial[]>([]);
-
-  const [flashcards, setFlashcards] = useState<Flashcard[]>([]);
-  const [flashcardsLoading, setFlashcardsLoading] = useState(false);
 
   const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
   const [quizLoading, setQuizLoading] = useState(false);
@@ -680,43 +672,6 @@ export default function Home() {
     }
   }
 
-  async function generateFlashcards() {
-    setGlobalError("");
-    setFlashcardsLoading(true);
-
-    try {
-      const sourceText = combinedAiContext || "General study strategy and weak concepts from class performance.";
-
-      const response = await fetch("/api/ai/flashcards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: focusRecommendations[0]?.subject ?? courses[0]?.name ?? "General",
-          content: sourceText.slice(0, 6000),
-          count: 10,
-        }),
-      });
-
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error ?? "Failed to generate flashcards");
-      }
-
-      const generated = (json.flashcards ?? []) as Flashcard[];
-      setFlashcards(generated);
-      appendHistory({
-        type: "flashcards",
-        title: "Flashcards generated",
-        summary: `Created ${generated.length} flashcards for ${focusRecommendations[0]?.subject ?? courses[0]?.name ?? "General"}.`,
-        path: "/",
-      });
-    } catch (error) {
-      setGlobalError(error instanceof Error ? error.message : "Flashcard generation failed");
-    } finally {
-      setFlashcardsLoading(false);
-    }
-  }
-
   async function generateQuiz() {
     setGlobalError("");
     setQuizLoading(true);
@@ -832,7 +787,6 @@ export default function Home() {
         { day: "Wednesday", tasks: ["Upload docs/images and generate checklist"], minutes: 45 },
       ];
 
-  const firstFlashcard = flashcards[0];
   const firstQuiz = quiz[0];
 
   return (
@@ -856,25 +810,24 @@ export default function Home() {
             <div className="w-full rounded-2xl border bg-background/70 p-4 md:w-56">
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">GPA Snapshot</p>
               <div className="mt-2 space-y-1">
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-base">
                   <span className="text-muted-foreground">Unweighted</span>
-                  <span className="font-semibold">
+                  <span className="text-lg font-semibold">
                     {gpaSummary.unweightedGpa == null ? "--" : gpaSummary.unweightedGpa.toFixed(2)}
                   </span>
                 </div>
-                <div className="flex items-center justify-between text-sm">
+                <div className="flex items-center justify-between text-base">
                   <span className="text-muted-foreground">Weighted</span>
-                  <span className="font-semibold">
+                  <span className="text-lg font-semibold">
                     {gpaSummary.weightedGpa == null ? "--" : gpaSummary.weightedGpa.toFixed(2)}
                   </span>
                 </div>
               </div>
-              <p className="mt-1 text-xs text-muted-foreground">
+              <p className="mt-2 text-sm text-muted-foreground">
                 {gpaSummary.classCount > 0
                   ? `${gpaSummary.classCount} classes • ${gpaSummary.averageGrade?.toFixed(1)}% avg`
                   : "Sync Canvas grades to calculate"}
               </p>
-              <p className="mt-2 text-[11px] text-muted-foreground">Formula: GPA = Σ(points × credits) / Σ(credits).</p>
             </div>
           </div>
           </header>
@@ -1063,23 +1016,18 @@ export default function Home() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <CardTitle>Flashcards</CardTitle>
-                <CardDescription>Generated from your assignments</CardDescription>
+                <CardDescription>Open a dedicated flashcards deck</CardDescription>
               </div>
               <Sparkles className="size-5 text-accent" />
             </div>
-            <Button variant="secondary" onClick={generateFlashcards} disabled={flashcardsLoading}>
-              {flashcardsLoading ? "Generating Flashcards..." : "Generate Flashcards"}
+            <Button asChild variant="secondary">
+              <Link href="/flashcards">Open Flashcards</Link>
             </Button>
             <div className="mt-3 rounded-2xl border bg-background/60 p-4">
-              {firstFlashcard ? (
-                <>
-                  <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Card 1/{flashcards.length}</p>
-                  <p className="mt-2 text-lg font-semibold">{firstFlashcard.question}</p>
-                  <p className="mt-2 text-sm text-muted-foreground">{firstFlashcard.answer}</p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No flashcards yet. Upload material and generate.</p>
-              )}
+              <p className="text-sm text-muted-foreground">
+                The flashcards page auto-generates from your latest study guide when available, supports card flipping,
+                next/back controls, and a chat box to tailor or add more cards.
+              </p>
             </div>
             </Card>
 
