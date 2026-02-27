@@ -181,50 +181,31 @@ function isLikelyUnitHeader(title: string): boolean {
   return /^(unit|chapter|module|lesson)\s*\d+(\b|[:\-\s]).*/.test(normalized);
 }
 
-function scoreToUnweightedGpa(score: number): number {
-  if (score >= 93) return 4.0;
-  if (score >= 90) return 3.7;
-  if (score >= 87) return 3.3;
-  if (score >= 83) return 3.0;
-  if (score >= 80) return 2.7;
-  if (score >= 77) return 2.3;
-  if (score >= 73) return 2.0;
-  if (score >= 70) return 1.7;
-  if (score >= 67) return 1.3;
-  if (score >= 65) return 1.0;
+function scoreToLetterGrade(score: number): "A" | "B" | "C" | "D" | "F" {
+  if (score >= 90) return "A";
+  if (score >= 80) return "B";
+  if (score >= 70) return "C";
+  if (score >= 60) return "D";
+  return "F";
+}
+
+function letterToGpaPoints(letter: "A" | "B" | "C" | "D" | "F"): number {
+  if (letter === "A") return 4.0;
+  if (letter === "B") return 3.0;
+  if (letter === "C") return 2.0;
+  if (letter === "D") return 1.0;
   return 0.0;
 }
 
-function letterGradeToGpa(letterGrade: string): number | null {
-  const normalized = letterGrade.trim().toUpperCase();
-  if (!normalized) {
-    return null;
-  }
-
-  const map: Record<string, number> = {
-    A: 4.0,
-    "A-": 3.7,
-    "B+": 3.3,
-    B: 3.0,
-    "B-": 2.7,
-    "C+": 2.3,
-    C: 2.0,
-    "C-": 1.7,
-    "D+": 1.3,
-    D: 1.0,
-    "D-": 0.7,
-    F: 0.0,
-  };
-
-  return map[normalized] ?? null;
-}
-
-function courseRigorWeight(courseName: string): number {
+function courseTypeAndWeight(courseName: string): { type: "Standard" | "Honors" | "Advanced"; bonus: number } {
   const name = courseName.toLowerCase();
-  if (/\b(ap|advanced placement|ib|honors|dual|concurrent enrollment|college)\b/.test(name)) {
-    return 0.5;
+  if (/\b(ap|advanced placement|ib)\b/.test(name)) {
+    return { type: "Advanced", bonus: 1.0 };
   }
-  return 0;
+  if (/\b(honors|dual|concurrent enrollment|college)\b/.test(name)) {
+    return { type: "Honors", bonus: 0.5 };
+  }
+  return { type: "Standard", bonus: 0.0 };
 }
 
 export default function Home() {
@@ -394,26 +375,38 @@ export default function Home() {
       .map((course) => {
         const enrollment = course.enrollments?.[0];
         const score = Number(enrollment?.computed_current_score);
-        const letter = typeof enrollment?.computed_current_grade === "string" ? enrollment.computed_current_grade : "";
-        const fromLetter = letter ? letterGradeToGpa(letter) : null;
-        const fromScore = Number.isFinite(score) && score >= 0 && score <= 100 ? scoreToUnweightedGpa(score) : null;
-
-        // Prefer Canvas letter grade GPA if available; fallback to score estimate.
-        const gpa = fromLetter ?? fromScore;
         const normalizedScore = Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
-
-        // Skip pass/fail or otherwise non-GPA rows with no valid GPA conversion.
-        if (gpa == null) {
+        if (normalizedScore == null) {
           return null;
         }
 
+        const letter = scoreToLetterGrade(normalizedScore);
+        const unweightedPoints = letterToGpaPoints(letter);
+        const courseType = courseTypeAndWeight(course.name);
+        const weightedPoints = Math.min(5.0, unweightedPoints + courseType.bonus);
+        const credits = 3;
+
         return {
-          gpa,
-          weightedGpa: Math.min(5.0, gpa + courseRigorWeight(course.name)),
           score: normalizedScore,
+          letter,
+          credits,
+          unweightedPoints,
+          weightedPoints,
+          courseType: courseType.type,
         };
       })
-      .filter((row): row is { gpa: number; weightedGpa: number; score: number | null } => Boolean(row));
+      .filter(
+        (
+          row,
+        ): row is {
+          score: number;
+          letter: "A" | "B" | "C" | "D" | "F";
+          credits: number;
+          unweightedPoints: number;
+          weightedPoints: number;
+          courseType: "Standard" | "Honors" | "Advanced";
+        } => Boolean(row),
+      );
 
     if (courseStats.length === 0) {
       return {
@@ -424,10 +417,17 @@ export default function Home() {
       };
     }
 
-    const scores = courseStats.map((row) => row.score).filter((score): score is number => score != null);
+    const scores = courseStats.map((row) => row.score);
     const averageGrade = scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
-    const unweightedGpa = courseStats.reduce((sum, row) => sum + row.gpa, 0) / courseStats.length;
-    const weightedGpa = courseStats.reduce((sum, row) => sum + row.weightedGpa, 0) / courseStats.length;
+    const totalCredits = courseStats.reduce((sum, row) => sum + row.credits, 0);
+    const unweightedGpa =
+      totalCredits > 0
+        ? courseStats.reduce((sum, row) => sum + row.unweightedPoints * row.credits, 0) / totalCredits
+        : null;
+    const weightedGpa =
+      totalCredits > 0
+        ? courseStats.reduce((sum, row) => sum + row.weightedPoints * row.credits, 0) / totalCredits
+        : null;
     return { unweightedGpa, weightedGpa, averageGrade, classCount: courseStats.length };
   }, [courses]);
 
@@ -848,7 +848,7 @@ export default function Home() {
                   ? `${gpaSummary.classCount} classes • ${gpaSummary.averageGrade?.toFixed(1)}% avg`
                   : "Sync Canvas grades to calculate"}
               </p>
-              <p className="mt-2 text-[11px] text-muted-foreground">Weighted uses +0.5 for AP/Honors/IB/Dual/Concurrent Enrollment course names.</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">Formula: GPA = Σ(points × credits) / Σ(credits).</p>
             </div>
           </div>
           </header>
