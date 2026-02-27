@@ -38,6 +38,7 @@ type Course = {
   name: string;
   enrollments?: Array<{
     computed_current_score?: number | null;
+    computed_current_grade?: string | null;
   }>;
 };
 
@@ -192,6 +193,38 @@ function scoreToUnweightedGpa(score: number): number {
   if (score >= 67) return 1.3;
   if (score >= 65) return 1.0;
   return 0.0;
+}
+
+function letterGradeToGpa(letterGrade: string): number | null {
+  const normalized = letterGrade.trim().toUpperCase();
+  if (!normalized) {
+    return null;
+  }
+
+  const map: Record<string, number> = {
+    A: 4.0,
+    "A-": 3.7,
+    "B+": 3.3,
+    B: 3.0,
+    "B-": 2.7,
+    "C+": 2.3,
+    C: 2.0,
+    "C-": 1.7,
+    "D+": 1.3,
+    D: 1.0,
+    "D-": 0.7,
+    F: 0.0,
+  };
+
+  return map[normalized] ?? null;
+}
+
+function courseRigorWeight(courseName: string): number {
+  const name = courseName.toLowerCase();
+  if (/\b(ap|advanced placement|ib|honors|dual|concurrent enrollment|college)\b/.test(name)) {
+    return 0.5;
+  }
+  return 0;
 }
 
 export default function Home() {
@@ -357,17 +390,45 @@ export default function Home() {
   );
 
   const gpaSummary = useMemo(() => {
-    const scores = courses
-      .map((course) => Number(course.enrollments?.[0]?.computed_current_score))
-      .filter((score) => Number.isFinite(score) && score >= 0 && score <= 100);
+    const courseStats = courses
+      .map((course) => {
+        const enrollment = course.enrollments?.[0];
+        const score = Number(enrollment?.computed_current_score);
+        const letter = typeof enrollment?.computed_current_grade === "string" ? enrollment.computed_current_grade : "";
+        const fromLetter = letter ? letterGradeToGpa(letter) : null;
+        const fromScore = Number.isFinite(score) && score >= 0 && score <= 100 ? scoreToUnweightedGpa(score) : null;
 
-    if (scores.length === 0) {
-      return { gpa: null as number | null, averageGrade: null as number | null, classCount: 0 };
+        // Prefer Canvas letter grade GPA if available; fallback to score estimate.
+        const gpa = fromLetter ?? fromScore;
+        const normalizedScore = Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
+
+        // Skip pass/fail or otherwise non-GPA rows with no valid GPA conversion.
+        if (gpa == null) {
+          return null;
+        }
+
+        return {
+          gpa,
+          weightedGpa: Math.min(5.0, gpa + courseRigorWeight(course.name)),
+          score: normalizedScore,
+        };
+      })
+      .filter((row): row is { gpa: number; weightedGpa: number; score: number | null } => Boolean(row));
+
+    if (courseStats.length === 0) {
+      return {
+        unweightedGpa: null as number | null,
+        weightedGpa: null as number | null,
+        averageGrade: null as number | null,
+        classCount: 0,
+      };
     }
 
-    const averageGrade = scores.reduce((sum, value) => sum + value, 0) / scores.length;
-    const gpa = scores.reduce((sum, value) => sum + scoreToUnweightedGpa(value), 0) / scores.length;
-    return { gpa, averageGrade, classCount: scores.length };
+    const scores = courseStats.map((row) => row.score).filter((score): score is number => score != null);
+    const averageGrade = scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
+    const unweightedGpa = courseStats.reduce((sum, row) => sum + row.gpa, 0) / courseStats.length;
+    const weightedGpa = courseStats.reduce((sum, row) => sum + row.weightedGpa, 0) / courseStats.length;
+    return { unweightedGpa, weightedGpa, averageGrade, classCount: courseStats.length };
   }, [courses]);
 
   const focusSubjects = useMemo<FocusDisplay[]>(
@@ -767,16 +828,27 @@ export default function Home() {
               {globalError ? <p className="text-sm font-semibold text-red-600">{globalError}</p> : null}
             </div>
             <div className="w-full rounded-2xl border bg-background/70 p-4 md:w-56">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Estimated GPA</p>
-              <p className="mt-1 text-3xl font-semibold">
-                {gpaSummary.gpa == null ? "--" : gpaSummary.gpa.toFixed(2)}
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">GPA Snapshot</p>
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Unweighted</span>
+                  <span className="font-semibold">
+                    {gpaSummary.unweightedGpa == null ? "--" : gpaSummary.unweightedGpa.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Weighted</span>
+                  <span className="font-semibold">
+                    {gpaSummary.weightedGpa == null ? "--" : gpaSummary.weightedGpa.toFixed(2)}
+                  </span>
+                </div>
+              </div>
               <p className="mt-1 text-xs text-muted-foreground">
                 {gpaSummary.classCount > 0
                   ? `${gpaSummary.classCount} classes • ${gpaSummary.averageGrade?.toFixed(1)}% avg`
                   : "Sync Canvas grades to calculate"}
               </p>
-              <p className="mt-2 text-[11px] text-muted-foreground">Unweighted estimate from current Canvas scores.</p>
+              <p className="mt-2 text-[11px] text-muted-foreground">Weighted uses +0.5 for AP/Honors/IB/Dual/Concurrent Enrollment course names.</p>
             </div>
           </div>
           </header>
