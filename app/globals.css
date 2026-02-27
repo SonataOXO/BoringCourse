@@ -1,6 +1,7 @@
 @import "tailwindcss";
 
 :root {
+  color-scheme: light;
   --background: #fffdf7;
   --foreground: #1c1b19;
   --muted: #f3ebd9;
@@ -8,10 +9,22 @@
   --card: #fff9ec;
   --card-foreground: #2a2319;
   --border: #e4d7bd;
-  --accent: #e56b2f;
   --icon-accent: #e56b2f;
+  --accent: var(--icon-accent);
   --accent-foreground: #fff8ef;
-  --ring: #d55a1f;
+  --ring: var(--icon-accent);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --background: #11141a;
+  --foreground: #f5f2ea;
+  --muted: #1f2530;
+  --muted-foreground: #b7b9bf;
+  --card: #171c24;
+  --card-foreground: #f5f2ea;
+  --border: #2d3644;
+  --accent-foreground: #fff8ef;
 }
 
 @theme inline {
@@ -45,4 +58,11 @@ body {
     radial-gradient(circle at 20% 20%, rgba(229, 107, 47, 0.13), transparent 34%),
     radial-gradient(circle at 78% 10%, rgba(0, 122, 92, 0.1), transparent 30%),
     radial-gradient(circle at 50% 100%, rgba(222, 182, 93, 0.2), transparent 36%);
+}
+
+:root[data-theme="dark"] .grainy-bg {
+  background-image:
+    radial-gradient(circle at 20% 20%, rgba(229, 107, 47, 0.2), transparent 34%),
+    radial-gradient(circle at 78% 10%, rgba(0, 122, 92, 0.18), transparent 30%),
+    radial-gradient(circle at 50% 100%, rgba(222, 182, 93, 0.16), transparent 36%);
 }

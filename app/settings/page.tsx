@@ -14,20 +14,30 @@ import {
   readIconColorPreference,
   writeIconColorPreference,
 } from "@/lib/client/ui-preferences";
+import {
+  applyThemeToDocument,
+  readThemePreference,
+  type ThemePreference,
+  writeThemePreference,
+} from "@/lib/client/theme-preferences";
 
 export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState(() => readCanvasAuthSettings().baseUrl);
   const [token, setToken] = useState(() => readCanvasAuthSettings().token);
   const [iconColor, setIconColor] = useState(() => readIconColorPreference());
+  const [theme, setTheme] = useState<ThemePreference>(() => readThemePreference());
   const [showToken, setShowToken] = useState(false);
   const [message, setMessage] = useState("");
 
   function saveSettings() {
     writeCanvasAuthSettings({ baseUrl, token });
     const normalized = writeIconColorPreference(iconColor);
+    const savedTheme = writeThemePreference(theme);
     setIconColor(normalized);
+    setTheme(savedTheme);
     applyIconColorToDocument(normalized);
-    setMessage("Saved Canvas settings and icon color for this user/browser.");
+    applyThemeToDocument(savedTheme);
+    setMessage("Saved Canvas settings, icon color, and theme for this user/browser.");
   }
 
   function resetIconColor() {
@@ -119,6 +129,33 @@ export default function SettingsPage() {
                 </Button>
               </div>
               <p className="mt-1 text-xs text-muted-foreground">Applies to dashboard accent icons.</p>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground">Theme</label>
+              <div className="mt-1 flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant={theme === "light" ? "default" : "secondary"}
+                  onClick={() => {
+                    setTheme("light");
+                    applyThemeToDocument("light");
+                  }}
+                >
+                  Light
+                </Button>
+                <Button
+                  type="button"
+                  variant={theme === "dark" ? "default" : "secondary"}
+                  onClick={() => {
+                    setTheme("dark");
+                    applyThemeToDocument("dark");
+                  }}
+                >
+                  Dark
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Applies across pages for this user/browser.</p>
             </div>
 
             <Button onClick={saveSettings}>Save Canvas Settings</Button>

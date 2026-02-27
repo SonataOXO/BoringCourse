@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Grotesk, Source_Serif_4 } from "next/font/google";
 import { IconColorProvider } from "@/components/ui/icon-color-provider";
+import { ThemeProvider } from "@/components/ui/theme-provider";
 import "./globals.css";
 
 const spaceGrotesk = Space_Grotesk({
@@ -26,6 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${spaceGrotesk.variable} ${sourceSerif.variable} antialiased`}>
+        <ThemeProvider />
         <IconColorProvider />
         {children}
       </body>

@@ -32,7 +32,8 @@ export function applyIconColorToDocument(color: string): void {
   }
   const normalized = /^#[0-9a-fA-F]{6}$/.test(color) ? color : DEFAULT_ICON_COLOR;
   document.documentElement.style.setProperty("--icon-accent", normalized);
+  document.documentElement.style.setProperty("--accent", normalized);
+  document.documentElement.style.setProperty("--ring", normalized);
 }
 
 export { DEFAULT_ICON_COLOR };
-
