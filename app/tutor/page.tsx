@@ -154,6 +154,7 @@ function readDashboardState(): PersistedDashboardState {
 export default function TutorPage() {
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const documentInputRef = useRef<HTMLInputElement | null>(null);
+  const questionInputRef = useRef<HTMLTextAreaElement | null>(null);
   const focusAutoRanRef = useRef(false);
   const handoffAutoRanRef = useRef(false);
 
@@ -183,6 +184,7 @@ export default function TutorPage() {
   const [focusTargetAssignment, setFocusTargetAssignment] = useState("");
   const [focusTargetNote, setFocusTargetNote] = useState("");
   const [focusTargetAssignmentsLoading, setFocusTargetAssignmentsLoading] = useState(false);
+  const [showFormulaHelper, setShowFormulaHelper] = useState(false);
   const [dashboardState, setDashboardState] = useState<PersistedDashboardState>({
     courses: [],
     focusRecommendations: [],
@@ -667,6 +669,26 @@ export default function TutorPage() {
     window.localStorage.setItem(HIDE_TUTOR_RESUME_KEY, "1");
   }
 
+  function insertFormulaText(snippet: string) {
+    const input = questionInputRef.current;
+    if (!input) {
+      setQuestion((prev) => `${prev}${snippet}`);
+      return;
+    }
+
+    const start = input.selectionStart ?? input.value.length;
+    const end = input.selectionEnd ?? input.value.length;
+    const value = question;
+    const next = `${value.slice(0, start)}${snippet}${value.slice(end)}`;
+    setQuestion(next);
+
+    requestAnimationFrame(() => {
+      input.focus();
+      const cursor = start + snippet.length;
+      input.setSelectionRange(cursor, cursor);
+    });
+  }
+
   useEffect(() => {
     if (focusAutoRanRef.current) {
       return;
@@ -953,6 +975,7 @@ export default function TutorPage() {
 
           <div className="mt-3 flex gap-2">
             <textarea
+              ref={questionInputRef}
               value={question}
               onChange={(event) => setQuestion(event.target.value)}
               placeholder="Ask your tutor..."
@@ -965,11 +988,60 @@ export default function TutorPage() {
               <Button type="button" variant="secondary" onClick={() => documentInputRef.current?.click()}>
                 Documents
               </Button>
+              <Button type="button" variant="secondary" onClick={() => setShowFormulaHelper((prev) => !prev)}>
+                {showFormulaHelper ? "Hide Helper" : "Formula Helper"}
+              </Button>
               <Button onClick={() => void askTutor()} disabled={loading}>
                 <Brain className="size-4" /> {loading ? "Thinking..." : "Send"}
               </Button>
             </div>
           </div>
+
+          {showFormulaHelper ? (
+            <div className="mt-3 rounded-2xl border bg-background/70 p-3">
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">Math + Chemistry Helper</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tap to insert clean symbols so you do not need ^ formatting.
+              </p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {["²", "³", "⁺", "⁻", "√", "π", "Δ", "≤", "≥", "≠", "±", "→", "÷", "×"].map((token) => (
+                  <button
+                    key={token}
+                    type="button"
+                    onClick={() => insertFormulaText(token)}
+                    className="rounded-full border bg-muted px-3 py-1 text-xs font-semibold hover:bg-background"
+                  >
+                    {token}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {[
+                  "x²",
+                  "x³",
+                  "H₂O",
+                  "CO₂",
+                  "Na⁺",
+                  "Cl⁻",
+                  "OH⁻",
+                  "NO₃⁻",
+                  "SO₄²⁻",
+                  "CO₃²⁻",
+                  "NH₄⁺",
+                  "PO₄³⁻",
+                ].map((token) => (
+                  <button
+                    key={token}
+                    type="button"
+                    onClick={() => insertFormulaText(token)}
+                    className="rounded-full border bg-muted px-3 py-1 text-xs font-semibold hover:bg-background"
+                  >
+                    {token}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
 
           {uploadMessage ? <p className="mt-2 text-xs text-muted-foreground">{uploadMessage}</p> : null}
         </Card>

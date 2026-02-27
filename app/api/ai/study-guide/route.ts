@@ -194,6 +194,17 @@ function extractTopicTokens(question: string): string[] {
     "why",
     "which",
     "tell",
+    "might",
+    "next",
+    "be",
+    "is",
+    "are",
+    "this",
+    "that",
+    "these",
+    "those",
+    "upcoming",
+    "exam",
   ]);
   return Array.from(
     new Set(
@@ -229,8 +240,63 @@ function isJunkTopic(value: string): boolean {
     "guide",
     "quiz",
     "test",
+    "might",
+    "next",
+    "lesson",
+    "unit",
+    "chapter",
+    "module",
+    "week",
   ]);
-  return junkWords.has(normalized);
+  if (junkWords.has(normalized)) {
+    return true;
+  }
+  if (/^(lesson|unit|chapter|module|week)\s*\d+$/i.test(normalized)) {
+    return true;
+  }
+  if (/^[a-z]{1,3}$/.test(normalized)) {
+    return true;
+  }
+  return false;
+}
+
+function sanitizeTopicCandidate(raw: string): string | null {
+  const trimmed = raw.trim().replace(/\s+/g, " ");
+  if (!trimmed) {
+    return null;
+  }
+
+  const withoutNumberedPrefix = trimmed.replace(/^(lesson|unit|chapter|module|week)\s*\d+[:\-\s]+/i, "").trim();
+  const candidate = withoutNumberedPrefix || trimmed;
+
+  if (!candidate || isJunkTopic(candidate)) {
+    return null;
+  }
+  if (/^(lesson|unit|chapter|module|week)\s*\d+$/i.test(candidate)) {
+    return null;
+  }
+
+  return candidate.replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function sanitizeTopicList(values: string[]): string[] {
+  const seen = new Set<string>();
+  const result: string[] = [];
+
+  for (const raw of values) {
+    const clean = sanitizeTopicCandidate(String(raw));
+    if (!clean) {
+      continue;
+    }
+    const key = clean.toLowerCase();
+    if (seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    result.push(clean);
+  }
+
+  return result;
 }
 
 function extractPromptConcepts(prompt: string): string[] {
@@ -304,17 +370,14 @@ function defaultGuide(body: z.infer<typeof requestSchema>, topicTokens: string[]
   const courseName = body.selectedCourse?.name ?? null;
   const assignmentNames = body.selectedAssignments.map((a) => a.name);
   const inferred = inferLikelyTopics(body.selectedCourse?.name ?? "", body.userPrompt ?? "");
-  const explicit = body.selectedAssignments.map((a) => a.conceptHint || a.name).filter(Boolean);
-  const unitTopics = body.selectedUnits;
+  const explicit = sanitizeTopicList(body.selectedAssignments.map((a) => a.conceptHint || a.name).filter(Boolean));
+  const unitTopics = sanitizeTopicList(body.selectedUnits);
   const promptConcepts = extractPromptConcepts(body.userPrompt ?? "");
   const promptTopics = promptConcepts.length > 0
-    ? promptConcepts
-    : topicTokens.map((token) => token.replace(/\b\w/g, (c) => c.toUpperCase()));
+    ? sanitizeTopicList(promptConcepts)
+    : sanitizeTopicList(topicTokens.map((token) => token.replace(/\b\w/g, (c) => c.toUpperCase())));
 
-  const baseTopics = Array.from(new Set([...explicit, ...unitTopics, ...promptTopics, ...inferred]))
-    .map((topic) => String(topic).trim())
-    .filter((topic) => !isJunkTopic(topic))
-    .slice(0, 8);
+  const baseTopics = sanitizeTopicList([...explicit, ...unitTopics, ...promptTopics, ...inferred]).slice(0, 8);
   const topics: Topic[] = baseTopics.map((topic) => {
     const topicLower = topic.toLowerCase();
     const direct = assignmentNames.some((name) => name.toLowerCase().includes(topicLower)) || explicit.some((name) => String(name).toLowerCase() === topicLower);
@@ -656,6 +719,9 @@ function normalizeGuide(candidate: unknown, fallback: GeneratorOutput): Generato
     merged.scope_lock.topics = fallback.scope_lock.topics;
   }
   merged.scope_lock.topics = merged.scope_lock.topics.filter((topic) => !isJunkTopic(topic.topic));
+  merged.scope_lock.topics = merged.scope_lock.topics
+    .map((topic) => ({ ...topic, topic: sanitizeTopicCandidate(topic.topic) ?? "" }))
+    .filter((topic) => topic.topic.length > 0);
   if (merged.scope_lock.topics.length === 0) {
     merged.scope_lock.topics = fallback.scope_lock.topics.filter((topic) => !isJunkTopic(topic.topic));
   }
@@ -702,6 +768,9 @@ function toLegacyGuide(generated: GeneratorOutput, userPrompt?: string): LegacyG
       return false;
     }
     if (genericTopicWords.has(lowered)) {
+      return false;
+    }
+    if (/^(lesson|unit|chapter|module|week)\s*\d+$/i.test(lowered)) {
       return false;
     }
     return lowered.split(/\s+/).some((part) => !genericTopicWords.has(part));

@@ -36,6 +36,79 @@ const mcqFallback = {
   explanation: "sqrt(-9) = sqrt(9) * sqrt(-1) = 3i.",
 };
 
+const SUBSCRIPT_DIGITS: Record<string, string> = {
+  "0": "₀",
+  "1": "₁",
+  "2": "₂",
+  "3": "₃",
+  "4": "₄",
+  "5": "₅",
+  "6": "₆",
+  "7": "₇",
+  "8": "₈",
+  "9": "₉",
+};
+
+const SUPERSCRIPT_CHARS: Record<string, string> = {
+  "0": "⁰",
+  "1": "¹",
+  "2": "²",
+  "3": "³",
+  "4": "⁴",
+  "5": "⁵",
+  "6": "⁶",
+  "7": "⁷",
+  "8": "⁸",
+  "9": "⁹",
+  "+": "⁺",
+  "-": "⁻",
+};
+
+function toSubscript(value: string): string {
+  return value
+    .split("")
+    .map((char) => SUBSCRIPT_DIGITS[char] ?? char)
+    .join("");
+}
+
+function toSuperscript(value: string): string {
+  return value
+    .split("")
+    .map((char) => SUPERSCRIPT_CHARS[char] ?? char)
+    .join("");
+}
+
+function normalizeTutorNotation(raw: string): string {
+  let text = raw;
+
+  // x^2, SO4^2-, NO3^- => superscript block
+  text = text.replace(/\^([0-9+-]+)/g, (_, exp: string) => toSuperscript(exp));
+
+  // Format chemistry-like tokens: Na+, Cl-, SO4²-, CO2, H2O
+  text = text.replace(/\b[A-Za-z][A-Za-z0-9()+\-⁺⁻]{0,24}\b/g, (token) => {
+    const looksChemical = /[A-Z]/.test(token) && (/\d/.test(token) || /[+\-⁺⁻]/.test(token));
+    if (!looksChemical) {
+      return token;
+    }
+
+    let next = token;
+
+    // trailing ionic charge (e.g., NO3-, Ca2+, SO4²-)
+    next = next.replace(/(\d*)([+\-⁺⁻])$/, (_, chargeDigits: string, sign: string) => {
+      const signAscii = sign === "⁺" ? "+" : sign === "⁻" ? "-" : sign;
+      const block = `${chargeDigits}${signAscii}`.replace(/[⁺⁻]/g, (char) => (char === "⁺" ? "+" : "-"));
+      return toSuperscript(block);
+    });
+
+    // stoichiometric numbers to subscript when after element/parenthesis
+    next = next.replace(/([A-Za-z\)])(\d+)/g, (_, lead: string, digits: string) => `${lead}${toSubscript(digits)}`);
+
+    return next;
+  });
+
+  return text;
+}
+
 export async function POST(request: NextRequest) {
   try {
     const json = await request.json();
@@ -72,6 +145,8 @@ export async function POST(request: NextRequest) {
       "For math responses, format clearly with short step-by-step bullets.",
       "For math responses, put each equation on its own bullet line.",
       "For math responses, always include a **Final Answer** section.",
+      "For chemistry/math notation, prefer readable Unicode superscripts/subscripts (example: SO₄²⁻, x², NO₃⁻).",
+      "Avoid caret notation like ^2 or ^- unless absolutely unavoidable.",
       "When solving quadratics, show both roots when they exist.",
       "If complex numbers are involved, explicitly show `i = sqrt(-1)` usage.",
       "Never leave formulas incomplete or cut off.",
@@ -156,9 +231,10 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({
-      response:
+      response: normalizeTutorNotation(
         responseText ||
-        "Tell me which exact step feels confusing, and I will walk through one example with you.",
+          "Tell me which exact step feels confusing, and I will walk through one example with you.",
+      ),
       mcq,
       nextSteps: [],
       focusAdvice: "",
