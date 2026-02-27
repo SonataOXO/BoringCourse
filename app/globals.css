@@ -9,6 +9,7 @@
   --card-foreground: #2a2319;
   --border: #e4d7bd;
   --accent: #e56b2f;
+  --icon-accent: #e56b2f;
   --accent-foreground: #fff8ef;
   --ring: #d55a1f;
 }
@@ -22,6 +23,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-border: var(--border);
   --color-accent: var(--accent);
+  --color-icon-accent: var(--icon-accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
   --font-sans: var(--font-space-grotesk);

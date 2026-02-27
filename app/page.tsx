@@ -839,7 +839,7 @@ export default function Home() {
                 <CardTitle>Focus Radar</CardTitle>
                 <CardDescription>Prioritized by grade trend + assignment performance</CardDescription>
               </div>
-              <ChartNoAxesCombined className="size-5 text-accent" />
+              <ChartNoAxesCombined className="size-5 text-icon-accent" />
             </div>
             <div className="space-y-5">
               {displayedFocus.map((subject) => (
@@ -905,7 +905,7 @@ export default function Home() {
                 <CardTitle>Smart Tutor</CardTitle>
                 <CardDescription>Open a dedicated tutoring session page</CardDescription>
               </div>
-              <CircleHelp className="size-5 text-accent" />
+              <CircleHelp className="size-5 text-icon-accent" />
             </div>
             <p className="rounded-2xl bg-muted p-3 text-sm text-muted-foreground">
               Start a full tutoring session with assignment uploads + Canvas coursework context on the dedicated page.
@@ -935,7 +935,7 @@ export default function Home() {
                 <CardTitle>Upcoming Work</CardTitle>
                 <CardDescription>Auto-scanned from Canvas + uploads</CardDescription>
               </div>
-              <FileText className="size-5 text-accent" />
+              <FileText className="size-5 text-icon-accent" />
             </div>
             <div className="space-y-3">
               {displayedUpcomingWork.length > 0 ? (
@@ -978,7 +978,7 @@ export default function Home() {
                 <CardTitle>Study Timeline</CardTitle>
                 <CardDescription>AI planned schedule for this week</CardDescription>
               </div>
-              <BookOpenCheck className="size-5 text-accent" />
+              <BookOpenCheck className="size-5 text-icon-accent" />
             </div>
             <Button asChild>
               <Link href="/study-guide">Generate Study Guide</Link>
@@ -1018,7 +1018,7 @@ export default function Home() {
                 <CardTitle>Flashcards</CardTitle>
                 <CardDescription>Open a dedicated flashcards deck</CardDescription>
               </div>
-              <Sparkles className="size-5 text-accent" />
+              <Sparkles className="size-5 text-icon-accent" />
             </div>
             <Button asChild variant="secondary">
               <Link href="/flashcards">Open Flashcards</Link>
@@ -1037,7 +1037,7 @@ export default function Home() {
                 <CardTitle>Quiz Mode</CardTitle>
                 <CardDescription>Adaptive mixed practice</CardDescription>
               </div>
-              <CheckCircle2 className="size-5 text-accent" />
+              <CheckCircle2 className="size-5 text-icon-accent" />
             </div>
             <Button onClick={generateQuiz} disabled={quizLoading}>
               {quizLoading ? "Generating Quiz..." : "Generate Quiz"}

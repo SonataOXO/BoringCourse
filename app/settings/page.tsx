@@ -7,16 +7,34 @@ import { ArrowLeft, Eye, EyeOff, Settings as SettingsIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { readCanvasAuthSettings, writeCanvasAuthSettings } from "@/lib/client/canvas-auth";
+import {
+  DEFAULT_ICON_COLOR,
+  applyIconColorToDocument,
+  clearIconColorPreference,
+  readIconColorPreference,
+  writeIconColorPreference,
+} from "@/lib/client/ui-preferences";
 
 export default function SettingsPage() {
   const [baseUrl, setBaseUrl] = useState(() => readCanvasAuthSettings().baseUrl);
   const [token, setToken] = useState(() => readCanvasAuthSettings().token);
+  const [iconColor, setIconColor] = useState(() => readIconColorPreference());
   const [showToken, setShowToken] = useState(false);
   const [message, setMessage] = useState("");
 
   function saveSettings() {
     writeCanvasAuthSettings({ baseUrl, token });
-    setMessage("Saved Canvas settings for this user/browser.");
+    const normalized = writeIconColorPreference(iconColor);
+    setIconColor(normalized);
+    applyIconColorToDocument(normalized);
+    setMessage("Saved Canvas settings and icon color for this user/browser.");
+  }
+
+  function resetIconColor() {
+    clearIconColorPreference();
+    setIconColor(DEFAULT_ICON_COLOR);
+    applyIconColorToDocument(DEFAULT_ICON_COLOR);
+    setMessage("Reset icon color to default.");
   }
 
   return (
@@ -32,9 +50,9 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Settings</CardTitle>
-              <CardDescription>Add your own Canvas school URL and API token for hosted use.</CardDescription>
+              <CardDescription>Add your own Canvas school URL, API token, and icon color for hosted use.</CardDescription>
             </div>
-            <SettingsIcon className="size-5 text-accent" />
+            <SettingsIcon className="size-5 text-icon-accent" />
           </div>
 
           <div className="mt-4 space-y-3">
@@ -68,6 +86,39 @@ export default function SettingsPage() {
                   {showToken ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
                 </Button>
               </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-muted-foreground" htmlFor="icon-color">
+                Icon Color
+              </label>
+              <div className="mt-1 flex items-center gap-2">
+                <input
+                  id="icon-color"
+                  type="color"
+                  value={iconColor}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setIconColor(value);
+                    applyIconColorToDocument(value);
+                  }}
+                  className="h-10 w-16 rounded-xl border bg-background p-1"
+                />
+                <input
+                  value={iconColor}
+                  onChange={(event) => {
+                    const value = event.target.value;
+                    setIconColor(value);
+                    applyIconColorToDocument(value);
+                  }}
+                  placeholder="#e56b2f"
+                  className="h-10 flex-1 rounded-xl border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
+                />
+                <Button type="button" variant="secondary" onClick={resetIconColor}>
+                  Reset
+                </Button>
+              </div>
+              <p className="mt-1 text-xs text-muted-foreground">Applies to dashboard accent icons.</p>
             </div>
 
             <Button onClick={saveSettings}>Save Canvas Settings</Button>
