@@ -393,7 +393,8 @@ export default function Home() {
         const hasLetterGrade = /^[A-DF][+-]?$/.test(rawGrade.toUpperCase()) || rawGrade.toUpperCase() === "F";
         const normalizedScore = Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
         const credits = estimatedCourseCredits(course.name);
-        const hasGradeEvidence = hasLetterGrade || normalizedScore != null;
+        const hasScoreEvidence = normalizedScore != null && normalizedScore > 0;
+        const hasGradeEvidence = hasLetterGrade || hasScoreEvidence;
 
         if (!hasGradeEvidence || credits <= 0) {
           return null;
@@ -413,6 +414,7 @@ export default function Home() {
           unweightedPoints,
           weightedPoints,
           courseType: courseType.type,
+          hasLetterGrade,
         };
       })
       .filter(
@@ -425,10 +427,14 @@ export default function Home() {
           unweightedPoints: number;
           weightedPoints: number;
           courseType: "Standard" | "Honors" | "Advanced";
+          hasLetterGrade: boolean;
         } => Boolean(row),
       );
 
-    if (courseStats.length === 0) {
+    const letterGradeCourseStats = courseStats.filter((row) => row.hasLetterGrade);
+    const gpaEligibleStats = letterGradeCourseStats.length > 0 ? letterGradeCourseStats : courseStats;
+
+    if (gpaEligibleStats.length === 0) {
       return {
         unweightedGpa: null as number | null,
         weightedGpa: null as number | null,
@@ -437,18 +443,18 @@ export default function Home() {
       };
     }
 
-    const scores = courseStats.map((row) => row.score);
+    const scores = gpaEligibleStats.map((row) => row.score);
     const averageGrade = scores.length > 0 ? scores.reduce((sum, value) => sum + value, 0) / scores.length : null;
-    const totalCredits = courseStats.reduce((sum, row) => sum + row.credits, 0);
+    const totalCredits = gpaEligibleStats.reduce((sum, row) => sum + row.credits, 0);
     const unweightedGpa =
       totalCredits > 0
-        ? courseStats.reduce((sum, row) => sum + row.unweightedPoints * row.credits, 0) / totalCredits
+        ? gpaEligibleStats.reduce((sum, row) => sum + row.unweightedPoints * row.credits, 0) / totalCredits
         : null;
     const weightedGpa =
       totalCredits > 0
-        ? courseStats.reduce((sum, row) => sum + row.weightedPoints * row.credits, 0) / totalCredits
+        ? gpaEligibleStats.reduce((sum, row) => sum + row.weightedPoints * row.credits, 0) / totalCredits
         : null;
-    return { unweightedGpa, weightedGpa, averageGrade, classCount: courseStats.length };
+    return { unweightedGpa, weightedGpa, averageGrade, classCount: gpaEligibleStats.length };
   }, [courses]);
 
   const focusSubjects = useMemo<FocusDisplay[]>(
