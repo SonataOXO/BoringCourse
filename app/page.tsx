@@ -208,6 +208,20 @@ function courseTypeAndWeight(courseName: string): { type: "Standard" | "Honors" 
   return { type: "Standard", bonus: 0.0 };
 }
 
+function isLikelyNonCreditCourse(courseName: string): boolean {
+  const name = courseName.toLowerCase();
+  return /\b(advisory|homeroom|study hall|attendance|lunch|office aide|teacher aide|counsel|seminar|support|orientation|survey)\b/.test(
+    name,
+  );
+}
+
+function estimatedCourseCredits(courseName: string): number {
+  if (isLikelyNonCreditCourse(courseName)) {
+    return 0;
+  }
+  return 3;
+}
+
 export default function Home() {
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [canvasMessage, setCanvasMessage] = useState("Connect Canvas to load real courses, assignments, and grades.");
@@ -375,16 +389,22 @@ export default function Home() {
       .map((course) => {
         const enrollment = course.enrollments?.[0];
         const score = Number(enrollment?.computed_current_score);
+        const rawGrade = typeof enrollment?.computed_current_grade === "string" ? enrollment.computed_current_grade.trim() : "";
+        const hasLetterGrade = /^[A-DF][+-]?$/.test(rawGrade.toUpperCase()) || rawGrade.toUpperCase() === "F";
         const normalizedScore = Number.isFinite(score) && score >= 0 && score <= 100 ? score : null;
-        if (normalizedScore == null) {
+        const credits = estimatedCourseCredits(course.name);
+        const hasGradeEvidence = hasLetterGrade || normalizedScore != null;
+
+        if (!hasGradeEvidence || credits <= 0) {
           return null;
         }
 
-        const letter = scoreToLetterGrade(normalizedScore);
+        const letter = hasLetterGrade
+          ? ((rawGrade.toUpperCase().replace(/\s+/g, "").charAt(0) || "F") as "A" | "B" | "C" | "D" | "F")
+          : scoreToLetterGrade(normalizedScore ?? 0);
         const unweightedPoints = letterToGpaPoints(letter);
         const courseType = courseTypeAndWeight(course.name);
         const weightedPoints = Math.min(5.0, unweightedPoints + courseType.bonus);
-        const credits = 3;
 
         return {
           score: normalizedScore,
