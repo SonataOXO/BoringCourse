@@ -40,6 +40,8 @@ export async function POST(request: NextRequest) {
   try {
     const json = await request.json();
     const body = requestSchema.parse(json);
+    const explicitPracticeCountMatch = body.question.match(/\b(\d{1,2})\s+(?:practice\s+)?problems?\b/i);
+    const explicitPracticeCount = explicitPracticeCountMatch ? Number(explicitPracticeCountMatch[1]) : null;
     const asksForPlanning = /\b(plan|schedule|week|deadline|due|focus on first|what should i focus)\b/i.test(
       body.question,
     );
@@ -85,6 +87,9 @@ export async function POST(request: NextRequest) {
       isVagueConceptPrompt
         ? "For vague prompts, keep explanation brief and prioritize questions that narrow scope."
         : "For specific prompts, include one concrete mini-example.",
+      explicitPracticeCount && explicitPracticeCount >= 2
+        ? `The student asked for ${explicitPracticeCount} practice problems. Provide exactly ${explicitPracticeCount} complete problems, numbered 1-${explicitPracticeCount}, each with a full answer and brief solution steps.`
+        : "If providing practice, include fully-formed questions and complete answers.",
       "Always include at least one check-in question tailored to the user's message.",
       "Do not output JSON. Return plain markdown text only.",
     ].join(" ");
@@ -106,11 +111,14 @@ export async function POST(request: NextRequest) {
 
     const responseText = await generateText(systemPrompt, userPrompt, {
       imageDataUrls: body.images,
-      maxOutputTokens: isMathQuestion ? 520 : 360,
+      maxOutputTokens: explicitPracticeCount && explicitPracticeCount >= 2 ? 1000 : isMathQuestion ? 520 : 360,
       reasoningEffort: "low",
     });
 
-    const shouldIncludeMcq = !asksForPlanning && asksForPractice;
+    const shouldIncludeMcq =
+      !asksForPlanning &&
+      asksForPractice &&
+      !(explicitPracticeCount && explicitPracticeCount >= 2);
 
     let mcq: typeof mcqFallback | undefined;
     if (shouldIncludeMcq) {

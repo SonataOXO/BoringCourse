@@ -180,6 +180,20 @@ function isLikelyUnitHeader(title: string): boolean {
   return /^(unit|chapter|module|lesson)\s*\d+(\b|[:\-\s]).*/.test(normalized);
 }
 
+function scoreToUnweightedGpa(score: number): number {
+  if (score >= 93) return 4.0;
+  if (score >= 90) return 3.7;
+  if (score >= 87) return 3.3;
+  if (score >= 83) return 3.0;
+  if (score >= 80) return 2.7;
+  if (score >= 77) return 2.3;
+  if (score >= 73) return 2.0;
+  if (score >= 70) return 1.7;
+  if (score >= 67) return 1.3;
+  if (score >= 65) return 1.0;
+  return 0.0;
+}
+
 export default function Home() {
   const [canvasLoading, setCanvasLoading] = useState(false);
   const [canvasMessage, setCanvasMessage] = useState("Connect Canvas to load real courses, assignments, and grades.");
@@ -341,6 +355,20 @@ export default function Home() {
     () => courses.find((course) => course.id === selectedCourseId) ?? null,
     [courses, selectedCourseId],
   );
+
+  const gpaSummary = useMemo(() => {
+    const scores = courses
+      .map((course) => Number(course.enrollments?.[0]?.computed_current_score))
+      .filter((score) => Number.isFinite(score) && score >= 0 && score <= 100);
+
+    if (scores.length === 0) {
+      return { gpa: null as number | null, averageGrade: null as number | null, classCount: 0 };
+    }
+
+    const averageGrade = scores.reduce((sum, value) => sum + value, 0) / scores.length;
+    const gpa = scores.reduce((sum, value) => sum + scoreToUnweightedGpa(value), 0) / scores.length;
+    return { gpa, averageGrade, classCount: scores.length };
+  }, [courses]);
 
   const focusSubjects = useMemo<FocusDisplay[]>(
     () =>
@@ -738,6 +766,18 @@ export default function Home() {
               <p className="text-sm text-muted-foreground">{canvasMessage}</p>
               {globalError ? <p className="text-sm font-semibold text-red-600">{globalError}</p> : null}
             </div>
+            <div className="w-full rounded-2xl border bg-background/70 p-4 md:w-56">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Estimated GPA</p>
+              <p className="mt-1 text-3xl font-semibold">
+                {gpaSummary.gpa == null ? "--" : gpaSummary.gpa.toFixed(2)}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {gpaSummary.classCount > 0
+                  ? `${gpaSummary.classCount} classes • ${gpaSummary.averageGrade?.toFixed(1)}% avg`
+                  : "Sync Canvas grades to calculate"}
+              </p>
+              <p className="mt-2 text-[11px] text-muted-foreground">Unweighted estimate from current Canvas scores.</p>
+            </div>
           </div>
           </header>
 
@@ -1016,12 +1056,12 @@ export default function Home() {
                 <CalendarDays className="size-4" /> {canvasLoading ? "Syncing..." : "Sync Canvas"}
               </Button>
 
-              <Button variant="ghost" className="w-full justify-start" onClick={logout}>
-                Logout
-              </Button>
-
               <Button asChild variant="secondary" className="w-full justify-start">
                 <Link href="/history">History</Link>
+              </Button>
+
+              <Button variant="ghost" className="w-full justify-start" onClick={logout}>
+                Logout
               </Button>
             </div>
           ) : (
