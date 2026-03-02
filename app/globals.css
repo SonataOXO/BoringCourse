@@ -55,6 +55,7 @@ body {
 
 .grainy-bg {
   background-image:
+    linear-gradient(180deg, #fffdf7 0%, #fcf5e7 45%, #f6eddd 100%),
     radial-gradient(circle at 20% 20%, rgba(229, 107, 47, 0.13), transparent 34%),
     radial-gradient(circle at 78% 10%, rgba(0, 122, 92, 0.1), transparent 30%),
     radial-gradient(circle at 50% 100%, rgba(222, 182, 93, 0.2), transparent 36%);
@@ -62,6 +63,7 @@ body {
 
 :root[data-theme="dark"] .grainy-bg {
   background-image:
+    linear-gradient(180deg, #11141a 0%, #141923 45%, #181f2b 100%),
     radial-gradient(circle at 20% 20%, rgba(229, 107, 47, 0.2), transparent 34%),
     radial-gradient(circle at 78% 10%, rgba(0, 122, 92, 0.18), transparent 30%),
     radial-gradient(circle at 50% 100%, rgba(222, 182, 93, 0.16), transparent 36%);

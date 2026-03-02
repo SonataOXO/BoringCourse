@@ -833,7 +833,7 @@ export default function Home() {
               </Button>
             </div>
             {resumeTutorHref ? (
-              <Button asChild variant="secondary" className="mt-2 w-full">
+              <Button asChild variant="secondary" className="mt-4 w-full">
                 <Link href={resumeTutorHref}>Jump Back In</Link>
               </Button>
             ) : null}
@@ -896,7 +896,7 @@ export default function Home() {
               <Link href="/study-guide">Generate Study Guide</Link>
             </Button>
             {resumeStudyGuideHref ? (
-              <Button asChild variant="secondary" className="mt-2">
+              <Button asChild variant="secondary" className="mt-4">
                 <Link href={resumeStudyGuideHref}>Jump Back In</Link>
               </Button>
             ) : null}
@@ -936,7 +936,7 @@ export default function Home() {
               <Link href="/flashcards">Open Flashcards</Link>
             </Button>
             {resumeFlashcardsHref ? (
-              <Button asChild variant="secondary" className="mt-2">
+              <Button asChild variant="secondary" className="mt-4">
                 <Link href={resumeFlashcardsHref}>Jump Back In</Link>
               </Button>
             ) : null}

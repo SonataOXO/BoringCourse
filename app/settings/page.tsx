@@ -139,6 +139,7 @@ export default function SettingsPage() {
                   variant={theme === "light" ? "default" : "secondary"}
                   onClick={() => {
                     setTheme("light");
+                    writeThemePreference("light");
                     applyThemeToDocument("light");
                   }}
                 >
@@ -149,6 +150,7 @@ export default function SettingsPage() {
                   variant={theme === "dark" ? "default" : "secondary"}
                   onClick={() => {
                     setTheme("dark");
+                    writeThemePreference("dark");
                     applyThemeToDocument("dark");
                   }}
                 >
