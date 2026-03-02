@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { getCanvasAuthHeaders } from "@/lib/client/canvas-auth";
-import { HISTORY_EVENT_NAME, appendHistory, readHistory } from "@/lib/client/history";
+import { HISTORY_EVENT_NAME, readHistory } from "@/lib/client/history";
 import { cn } from "@/lib/utils";
 
 type FocusRecommendation = {
@@ -59,13 +59,6 @@ type UploadedMaterial = {
   preview: string;
   conceptHint: string;
   wordCount: number;
-};
-
-type QuizQuestion = {
-  prompt: string;
-  options: string[];
-  answer: string;
-  explanation: string;
 };
 
 type FocusDisplay = {
@@ -229,13 +222,9 @@ export default function Home() {
   const [upcomingWork, setUpcomingWork] = useState<AssignmentItem[]>(fallbackUpcoming);
 
   const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
-  const [courseAssignments, setCourseAssignments] = useState<AssignmentItem[]>([]);
   const [assignmentCache, setAssignmentCache] = useState<AssignmentCache>({});
 
   const [uploadedMaterials, setUploadedMaterials] = useState<UploadedMaterial[]>([]);
-
-  const [quiz, setQuiz] = useState<QuizQuestion[]>([]);
-  const [quizLoading, setQuizLoading] = useState(false);
 
   const [globalError, setGlobalError] = useState("");
   const [cacheHydrated, setCacheHydrated] = useState(false);
@@ -369,22 +358,6 @@ export default function Home() {
 
     window.localStorage.setItem(DASHBOARD_STORAGE_KEY, JSON.stringify(persisted));
   }, [cacheHydrated, courses, focusRecommendations, upcomingWork, selectedCourseId, assignmentCache, uploadedMaterials]);
-
-  useEffect(() => {
-    if (!selectedCourseId) {
-      return;
-    }
-
-    const cached = assignmentCache[selectedCourseId];
-    if (cached) {
-      setCourseAssignments(cached);
-    }
-  }, [selectedCourseId, assignmentCache]);
-
-  const selectedCourse = useMemo(
-    () => courses.find((course) => course.id === selectedCourseId) ?? null,
-    [courses, selectedCourseId],
-  );
 
   const gpaSummary = useMemo(() => {
     const courseStats = courses
@@ -566,40 +539,11 @@ export default function Home() {
     );
   }, [upcomingWork]);
 
-  const canvasWorkContext = useMemo(() => {
-    const selectedCourseBlock = selectedCourse
-      ? `Selected course: ${selectedCourse.name}. Assignments: ${courseAssignments
-          .slice(0, 30)
-          .map((item) => `${item.name}${item.dueAt ? ` (due ${new Date(item.dueAt).toLocaleDateString()})` : ""}`)
-          .join("; ")}`
-      : "";
-
-    const upcomingBlock =
-      displayedUpcomingWork.length > 0
-        ? `Upcoming work from Canvas: ${displayedUpcomingWork
-            .slice(0, 20)
-            .map((item) => `${item.name}${item.dueAt ? ` (due ${new Date(item.dueAt).toLocaleDateString()})` : ""}`)
-            .join("; ")}`
-        : "";
-
-    return [selectedCourseBlock, upcomingBlock].filter(Boolean).join("\n");
-  }, [selectedCourse, courseAssignments, displayedUpcomingWork]);
-
-  const combinedAiContext = useMemo(() => {
-    const uploadBlock = uploadedMaterials
-      .slice(0, 5)
-      .map((material) => `Uploaded material: ${material.title}\n${material.content.slice(0, 2400)}`)
-      .join("\n\n");
-
-    return [canvasWorkContext, uploadBlock].filter(Boolean).join("\n\n");
-  }, [canvasWorkContext, uploadedMaterials]);
-
   async function loadAssignmentsForCourse(courseId: number, options?: { preferCache?: boolean }) {
     const preferCache = options?.preferCache ?? true;
     const cached = assignmentCache[courseId];
 
     if (preferCache && cached && cached.length > 0) {
-      setCourseAssignments(cached);
       return;
     }
 
@@ -626,10 +570,8 @@ export default function Home() {
         pointsPossible: (item.pointsPossible as number | null | undefined) ?? null,
       }));
 
-      setCourseAssignments(mapped);
       setAssignmentCache((prev) => ({ ...prev, [courseId]: mapped }));
     } catch (error) {
-      setCourseAssignments([]);
       setGlobalError(error instanceof Error ? error.message : "Failed to load assignments");
     }
   }
@@ -679,44 +621,6 @@ export default function Home() {
       setCanvasMessage("Canvas sync failed. Add CANVAS_BASE_URL and CANVAS_API_TOKEN in .env.local.");
     } finally {
       setCanvasLoading(false);
-    }
-  }
-
-  async function generateQuiz() {
-    setGlobalError("");
-    setQuizLoading(true);
-
-    try {
-      const sourceText = combinedAiContext || "Core concepts and assignment topics.";
-
-      const response = await fetch("/api/ai/quiz", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          subject: focusRecommendations[0]?.subject ?? courses[0]?.name ?? "General",
-          content: sourceText.slice(0, 6000),
-          count: 6,
-          difficulty: "medium",
-        }),
-      });
-
-      const json = await response.json();
-      if (!response.ok) {
-        throw new Error(json.error ?? "Failed to generate quiz");
-      }
-
-      const generated = (json.questions ?? []) as QuizQuestion[];
-      setQuiz(generated);
-      appendHistory({
-        type: "quiz",
-        title: "Quiz generated",
-        summary: `Created ${generated.length} quiz questions for ${focusRecommendations[0]?.subject ?? courses[0]?.name ?? "General"}.`,
-        path: "/",
-      });
-    } catch (error) {
-      setGlobalError(error instanceof Error ? error.message : "Quiz generation failed");
-    } finally {
-      setQuizLoading(false);
     }
   }
 
@@ -796,8 +700,6 @@ export default function Home() {
         { day: "Monday", tasks: ["Pick class, unit, and assignments"], minutes: 45 },
         { day: "Wednesday", tasks: ["Upload docs/images and generate checklist"], minutes: 45 },
       ];
-
-  const firstQuiz = quiz[0];
 
   return (
     <main className="grainy-bg min-h-screen px-6 py-10 md:px-10">
@@ -993,9 +895,6 @@ export default function Home() {
             <Button asChild>
               <Link href="/study-guide">Generate Study Guide</Link>
             </Button>
-            <Button asChild variant="secondary" className="mt-2">
-              <Link href="/flashcards">Open Flashcards</Link>
-            </Button>
             {resumeStudyGuideHref ? (
               <Button asChild variant="secondary" className="mt-2">
                 <Link href={resumeStudyGuideHref}>Jump Back In</Link>
@@ -1057,23 +956,11 @@ export default function Home() {
               </div>
               <CheckCircle2 className="size-5 text-icon-accent" />
             </div>
-            <Button onClick={generateQuiz} disabled={quizLoading}>
-              {quizLoading ? "Generating Quiz..." : "Generate Quiz"}
+            <Button asChild>
+              <Link href="/quiz">Generate Quiz</Link>
             </Button>
-            <div className="mt-3 space-y-3 rounded-2xl border bg-background/60 p-4 text-sm">
-              {firstQuiz ? (
-                <>
-                  <p className="font-semibold">{firstQuiz.prompt}</p>
-                  {firstQuiz.options.map((option) => (
-                    <div key={option} className="rounded-xl bg-muted p-2">
-                      {option}
-                    </div>
-                  ))}
-                  <p className="text-xs text-muted-foreground">Answer: {firstQuiz.answer}</p>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">No quiz yet. Generate from your uploaded content.</p>
-              )}
+            <div className="mt-3 rounded-2xl border bg-background/60 p-4 text-sm text-muted-foreground">
+              Opens the dedicated Quiz page with assignment selection, uploads, AI quiz chat, and live answer scoring.
             </div>
             </Card>
           </section>

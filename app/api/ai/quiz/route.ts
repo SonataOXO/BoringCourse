@@ -8,6 +8,7 @@ const requestSchema = z.object({
   content: z.string().min(20),
   count: z.number().int().min(1).max(20).default(8),
   difficulty: z.enum(["easy", "medium", "hard"]).default("medium"),
+  images: z.array(z.string().startsWith("data:image/")).max(5).default([]),
 });
 
 const fallback = {
@@ -33,8 +34,16 @@ export async function POST(request: NextRequest) {
       "Each question must have 4 options and one correct answer.",
     ].join(" ");
 
-    const userPrompt = JSON.stringify(body);
-    const result = await generateStructured(systemPrompt, userPrompt, fallback);
+    const userPrompt = JSON.stringify({
+      subject: body.subject,
+      content: body.content,
+      count: body.count,
+      difficulty: body.difficulty,
+    });
+    const result = await generateStructured(systemPrompt, userPrompt, fallback, {
+      imageDataUrls: body.images,
+      reasoningEffort: "low",
+    });
 
     return NextResponse.json(result);
   } catch (error) {
