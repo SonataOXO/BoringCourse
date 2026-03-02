@@ -94,6 +94,7 @@ const DASHBOARD_STORAGE_KEY = "boringcourse-dashboard-v1";
 const LATEST_STUDY_GUIDE_KEY = "boringcourse-latest-study-guide-v1";
 const HIDE_TUTOR_RESUME_KEY = "boringcourse-hide-resume-tutor-v1";
 const HIDE_STUDY_GUIDE_RESUME_KEY = "boringcourse-hide-resume-study-guide-v1";
+const HIDE_FLASHCARDS_RESUME_KEY = "boringcourse-hide-resume-flashcards-v1";
 
 const fallbackUpcoming: AssignmentItem[] = [
   { id: 1, name: "Lab Report Draft", dueAt: null, type: "Assignment" },
@@ -244,6 +245,7 @@ export default function Home() {
   const [hasStudyGuideHistory, setHasStudyGuideHistory] = useState(false);
   const [resumeTutorHref, setResumeTutorHref] = useState<string | null>(null);
   const [resumeStudyGuideHref, setResumeStudyGuideHref] = useState<string | null>(null);
+  const [resumeFlashcardsHref, setResumeFlashcardsHref] = useState<string | null>(null);
   const [latestStudyTimeline, setLatestStudyTimeline] = useState<Array<{ day: string; tasks: string[]; minutes: number }>>([]);
 
   useEffect(() => {
@@ -293,8 +295,10 @@ export default function Home() {
       const hasGuide = historyItems.some((item) => item.type === "study-guide");
       const latestTutor = historyItems.find((item) => item.type === "tutor") ?? null;
       const latestStudyGuide = historyItems.find((item) => item.type === "study-guide") ?? null;
+      const latestFlashcards = historyItems.find((item) => item.type === "flashcards") ?? null;
       const tutorResumeHidden = window.localStorage.getItem(HIDE_TUTOR_RESUME_KEY) === "1";
       const studyGuideResumeHidden = window.localStorage.getItem(HIDE_STUDY_GUIDE_RESUME_KEY) === "1";
+      const flashcardsResumeHidden = window.localStorage.getItem(HIDE_FLASHCARDS_RESUME_KEY) === "1";
       if (latestTutor && !tutorResumeHidden) {
         const separator = latestTutor.path.includes("?") ? "&" : "?";
         setResumeTutorHref(`${latestTutor.path}${separator}historyId=${encodeURIComponent(latestTutor.id)}`);
@@ -306,6 +310,12 @@ export default function Home() {
         setResumeStudyGuideHref(`${latestStudyGuide.path}${separator}historyId=${encodeURIComponent(latestStudyGuide.id)}`);
       } else {
         setResumeStudyGuideHref(null);
+      }
+      if (latestFlashcards && !flashcardsResumeHidden) {
+        const separator = latestFlashcards.path.includes("?") ? "&" : "?";
+        setResumeFlashcardsHref(`${latestFlashcards.path}${separator}historyId=${encodeURIComponent(latestFlashcards.id)}`);
+      } else {
+        setResumeFlashcardsHref(null);
       }
       let hasTimeline = false;
       try {
@@ -983,6 +993,9 @@ export default function Home() {
             <Button asChild>
               <Link href="/study-guide">Generate Study Guide</Link>
             </Button>
+            <Button asChild variant="secondary" className="mt-2">
+              <Link href="/flashcards">Open Flashcards</Link>
+            </Button>
             {resumeStudyGuideHref ? (
               <Button asChild variant="secondary" className="mt-2">
                 <Link href={resumeStudyGuideHref}>Jump Back In</Link>
@@ -1023,6 +1036,11 @@ export default function Home() {
             <Button asChild variant="secondary">
               <Link href="/flashcards">Open Flashcards</Link>
             </Button>
+            {resumeFlashcardsHref ? (
+              <Button asChild variant="secondary" className="mt-2">
+                <Link href={resumeFlashcardsHref}>Jump Back In</Link>
+              </Button>
+            ) : null}
             <div className="mt-3 rounded-2xl border bg-background/60 p-4">
               <p className="text-sm text-muted-foreground">
                 The flashcards page auto-generates from your latest study guide when available, supports card flipping,

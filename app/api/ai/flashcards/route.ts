@@ -9,6 +9,7 @@ const requestSchema = z.object({
   count: z.number().int().min(1).max(50).default(15),
   instructions: z.string().optional(),
   existingQuestions: z.array(z.string()).default([]),
+  images: z.array(z.string().startsWith("data:image/")).max(5).default([]),
 });
 
 const fallback = {
@@ -40,7 +41,10 @@ export async function POST(request: NextRequest) {
       instructions: body.instructions ?? "",
       existingQuestions: body.existingQuestions.slice(0, 60),
     });
-    const result = await generateStructured(systemPrompt, userPrompt, fallback);
+    const result = await generateStructured(systemPrompt, userPrompt, fallback, {
+      imageDataUrls: body.images,
+      reasoningEffort: "low",
+    });
 
     return NextResponse.json(result);
   } catch (error) {

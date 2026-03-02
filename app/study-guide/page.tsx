@@ -842,9 +842,14 @@ export default function StudyGuidePage() {
                   </div>
                 ))}
               </div>
-              <Button className="mt-4" onClick={openTutorWithGuide}>
-                Need more help? Open Tutor
-              </Button>
+              <div className="mt-4 flex flex-wrap gap-2">
+                <Button onClick={openTutorWithGuide}>
+                  Need more help? Open Tutor
+                </Button>
+                <Button asChild variant="secondary">
+                  <Link href="/flashcards">Open Flashcards</Link>
+                </Button>
+              </div>
             </Card>
 
             <Card>
