@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useEffect, useMemo, useState } from "react";
 import {
   BookOpenCheck,
@@ -708,7 +709,17 @@ export default function Home() {
           <header className="rounded-3xl border border-border bg-card/80 p-6 shadow-sm backdrop-blur md:p-8">
           <div className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
             <div className="space-y-3">
-              <Badge className="w-fit">BoringCourse AI School Helper</Badge>
+              <div className="flex items-center gap-3">
+                <Image
+                  src="/boringcourse-logo.svg"
+                  alt="BoringCourse logo"
+                  width={56}
+                  height={40}
+                  className="h-10 w-auto"
+                  priority
+                />
+                <Badge className="w-fit">BoringCourse AI School Helper</Badge>
+              </div>
               <h1 className="max-w-2xl text-3xl leading-tight font-semibold tracking-tight md:text-5xl">
                 Stop guessing what to study. Let your boring course work for you.
               </h1>

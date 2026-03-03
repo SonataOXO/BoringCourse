@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
@@ -80,6 +81,14 @@ export default function LoginPage() {
   return (
     <main className="grainy-bg flex min-h-screen items-center justify-center px-4 py-12">
       <Card className="w-full max-w-lg">
+        <Image
+          src="/boringcourse-logo.svg"
+          alt="BoringCourse logo"
+          width={220}
+          height={154}
+          className="mb-3 h-auto w-36"
+          priority
+        />
         <CardTitle className="text-2xl">Login to BoringCourse</CardTitle>
         <CardDescription className="mt-1">Welcome back. Use your email and password to continue.</CardDescription>
 

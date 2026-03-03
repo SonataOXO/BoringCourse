@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 420" role="img" aria-label="BoringCourse logo">
+  <title>BoringCourse logo</title>
+  <ellipse cx="300" cy="210" rx="280" ry="190" fill="#f6a21a" stroke="#0f1116" stroke-width="4" />
+
+  <defs>
+    <path id="title-arc" d="M 145 165 A 170 170 0 0 1 455 165" />
+  </defs>
+
+  <text font-family="'Poppins','Open Sans',sans-serif" font-size="66" font-weight="800" fill="#0f1116" letter-spacing="1.5">
+    <textPath href="#title-arc" startOffset="50%" text-anchor="middle">BoringCourse</textPath>
+  </text>
+
+  <g fill="none" stroke="#0f1116" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M150 310 L150 188 L178 188 L178 310 Z" />
+    <path d="M178 310 L178 172 L206 172 L206 310 Z" />
+    <path d="M206 310 L206 156 L234 156 L234 310 Z" />
+
+    <path d="M450 310 L450 188 L422 188 L422 310 Z" />
+    <path d="M422 310 L422 172 L394 172 L394 310 Z" />
+    <path d="M394 310 L394 156 L366 156 L366 310 Z" />
+
+    <path d="M234 310 L234 142 C262 142 289 150 300 170 C311 150 338 142 366 142 L366 310" />
+    <path d="M300 170 L300 310" />
+
+    <path d="M234 262 C261 262 286 270 300 294" />
+    <path d="M366 262 C339 262 314 270 300 294" />
+  </g>
+</svg>
