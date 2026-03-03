@@ -18,9 +18,9 @@ export const metadata: Metadata = {
   title: "BoringCourse",
   description: "AI school helper for assignments, study plans, and tutoring.",
   icons: {
-    icon: "/boringcourse-logo.svg",
-    shortcut: "/boringcourse-logo.svg",
-    apple: "/boringcourse-logo.svg",
+    icon: "/favicon-oval.svg",
+    shortcut: "/favicon-oval.svg",
+    apple: "/favicon-oval.svg",
   },
 };
 
