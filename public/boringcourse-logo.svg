@@ -3,10 +3,10 @@
   <ellipse cx="300" cy="210" rx="280" ry="190" fill="#f6a21a" stroke="#0f1116" stroke-width="4" />
 
   <defs>
-    <path id="title-arc" d="M 145 165 A 170 170 0 0 1 455 165" />
+    <path id="title-arc" d="M 120 178 A 195 195 0 0 1 480 178" />
   </defs>
 
-  <text font-family="'Poppins','Open Sans',sans-serif" font-size="66" font-weight="800" fill="#0f1116" letter-spacing="1.5">
+  <text font-family="'Poppins','Open Sans',sans-serif" font-size="58" font-weight="800" fill="#0f1116" letter-spacing="1">
     <textPath href="#title-arc" startOffset="50%" text-anchor="middle">BoringCourse</textPath>
   </text>
 
